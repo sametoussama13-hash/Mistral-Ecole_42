@@ -86,13 +86,18 @@ Document to analyze:
 {text[:8000]}
 ---
 
-Analyze this document and respond ONLY with valid JSON using this exact
-structure:
+For each line below analyze this document, assign a risk score from 0 to 100
+and respond ONLY with valid JSON using this exact structure:
 {{
   "executive_summary": "3-4 sentence summary of the vendor's overall risk
   posture",
   "risks": [
     {{
+      "scores": [
+        {{"score": 0}},
+        {{"score": 75}},
+        {{"score": 20}}
+      ]
       "title": "Short risk name",
       "level": "Critical|High|Medium|Low",
       "description": "Detailed description of the identified risk",
