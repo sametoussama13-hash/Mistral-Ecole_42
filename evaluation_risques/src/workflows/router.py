@@ -8,17 +8,13 @@ Receives the document and orchestrates the calls to:
   - analyzer.py   (risk analysis)
   - reporter.py   (report generation + human validation + PDF export)
 """
-import workflows.extractor # noqa
-import workflows.analyzer # noqa
-import workflows.reporter # noqa
 
-from enum import Enum
-from typing import Optional
-from datetime import datetime
-
-import mistralai.workflows as workflows
+import mistralai.workflows as wfk
 import mistralai.workflows.plugins.mistralai as workflows_mistralai
 from pydantic import BaseModel
+from enum import Enum
+from typing import Optional
+
 
 # --------------------------------##
 # Modéles de données
@@ -28,6 +24,8 @@ from pydantic import BaseModel
 class SourceType(str, Enum):
     PDF = "pdf"
     EMAIL = "email"
+    EXCEL = "excel"
+    JSON = "json"
 
 
 class TPRAInput(BaseModel):
@@ -49,14 +47,14 @@ class ValidationInput(BaseModel):
 # Main worflows
 # -------------------------------- #
 
-@workflows.workflow.define(
+@wfk.workflow.define(
     name="tpra-evaluation",
     workflow_display_name="Third Party Risk Assessement (TPRA)",
     workflow_description="Automated cyber risk analysis with human validation and PDF export.",
 )
-class TPRAWorkflow(workflows.InteractiveWorkflow):
+class TPRAWorkflow(wfk.InteractiveWorkflow):
 
-    @workflows.workflow.entrypoint
+    @wfk.workflow.entrypoint
     async def run(self, input: TPRAInput) -> str:
         from workflows.extractor import extract_text
         from workflows.analyzer import analyze_risks

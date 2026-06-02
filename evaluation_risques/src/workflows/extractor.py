@@ -14,20 +14,22 @@ import base64
 import os
 import tempfile
 
-import mistralai.workflows as workflows
+import mistralai.workflows as wfk
 
 # --------------------------------##
 # Main activity
 # --------------------------------##
 
 
-@workflows.activity()
+@wfk.activity()
 async def extract_text(source_type: str, content: str) -> str:
     """Entry point for text extraction from pdf or email."""
     if source_type == "pdf":
         return await _extract_from_pdf(content)
     elif source_type == "email":
         return await _extract_from_email(content)
+    elif source_type == "excel":
+        return await _extract_from_excel(content)
     else:
         return f"Unsupported source type: {source_type}"
 
@@ -36,7 +38,7 @@ async def extract_text(source_type: str, content: str) -> str:
 # --------------------------------##
 
 
-@workflows.activity()
+@wfk.activity()
 async def _extract_from_pdf(content: str) -> str:
     """Decodes a base64 PDF and extracts its text using pdfplumber."""
     try:
@@ -67,7 +69,7 @@ async def _extract_from_pdf(content: str) -> str:
         return f"PDF exctraction error: {e}"
     
 
-@workflows.activity()
+@wfk.activity()
 async def _extract_from_email(content: str) -> str:
     """Extract text in the email."""
     lines = content.splitlines()
@@ -76,6 +78,49 @@ async def _extract_from_email(content: str) -> str:
         if line.strip()  # keep only non-empty lines
     )
     return cleaned if cleaned else "Empty email content."
+
+
+@wfk.activity()
+async def _extract_from_excel(content: str) -> str:
+    """Extract text in the excel file."""
+    try:
+        import pandas
+        # --- Step 1:  Decode 64 bytes ---
+        excel_bytes = base64.b64decode(content)
+
+        # --- Step 2:  write bytes to temp excel file ---
+        with tempfile.NamedTemporaryFile(suffix=".xlsx", delete=False) as tmp:
+            tmp.write(excel_bytes)
+            tmp_path = tmp.name
+
+        # --- Step 3:  Read all sheets ---
+        sheets = pandas.read_excel(tmp_path, sheet_name=None)
+
+        # --- Step 4:  convert sheet to text ---
+        text = ""
+        for sheet_name, df in sheets.items():
+            text += f"\n=== Sheet: {sheet_name} ===\n"
+
+            headers = " | ".join(str(col) for col in df.columns)
+            text += headers + "\n"
+
+            for _, row in df.iterrows():
+                if row.isna().all():
+                    continue
+                line = " | ".join(str(val) if not pandas.isna(val) else "" for val in row)
+                text += line + "\n"
+
+        os.unlink(tmp_path)
+
+        return text if text else "No extractable text found in the Excel file."
+
+    except Exception as e:
+        return f"Excel extraction error: {e}"
+
+
+
+
+
 
 
 # ---------------------------------------------------------------------------

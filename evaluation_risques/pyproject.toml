@@ -9,7 +9,10 @@ dependencies = [
     "python-dotenv",
     "pdfplumber",
     "reportlab",
-    "mistralai"
+    "mistralai",
+    "pandas",
+    "numpy",
+    "openpyxl",
 ]
 
 [dependency-groups]

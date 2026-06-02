@@ -10,7 +10,7 @@ This is the only file that calls the Mistral API directly.
 import json
 import os
 
-import mistralai.workflows as workflows
+import mistralai.workflows as wfk
 from pydantic import BaseModel
 
 # --------------------------------##
@@ -39,7 +39,7 @@ class RiskAnalysis(BaseModel):
 # Activity called by router
 # --------------------------------##
 
-@workflows.activity()
+@wfk.activity()
 async def analyze_risks(
     text: str,
     vendor: str,
