@@ -8,10 +8,6 @@ Receives the document and orchestrates the calls to:
   - analyzer.py   (risk analysis)
   - reporter.py   (report generation + human validation + PDF export)
 """
-import workflows.extractor # noqa
-import workflows.analyzer # noqa
-import workflows.reporter # noqa
-
 from enum import Enum
 from typing import Optional
 from datetime import datetime
