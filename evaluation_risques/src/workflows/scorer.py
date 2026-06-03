@@ -2,15 +2,16 @@
 scorer.py
 =========
 Scores questions (1-4) AND recalculates risk levels from actual scores.
-Returns both ScoringResult AND updated analysis dict.
+Returns both ScoringResult AND updated analysis fields.
 """
 
 import json
 import os
-import re
 
 import mistralai.workflows as wfk
 from pydantic import BaseModel
+
+from workflows.utils import parse_questions, fallback_parse, score_to_level
 
 
 class QuestionScore(BaseModel):
@@ -36,48 +37,6 @@ class ScoringResult(BaseModel):
     executive_summary: str
 
 
-def _parse_questions(text: str) -> list[dict]:
-    questions = []
-    for line in text.split("\n"):
-        line = line.strip()
-        if not line:
-            continue
-        if re.match(r"^\d+\.\d+", line):
-            parts = line.split("\t")
-            if len(parts) >= 3:
-                questions.append({
-                    "question_id": parts[0].replace("*", "").strip(),
-                    "question":    parts[1].strip(),
-                    "response":    parts[2].strip(),
-                })
-            elif len(parts) == 2:
-                questions.append({
-                    "question_id": parts[0].replace("*", "").strip(),
-                    "question":    parts[1].strip(),
-                    "response":    "No response provided.",
-                })
-    return questions
-
-
-def _fallback_parse(text: str) -> list[dict]:
-    questions = []
-    paragraphs = [p.strip() for p in text.split("\n\n") if p.strip()]
-    for i, para in enumerate(paragraphs):
-        questions.append({
-            "question_id": f"P{i+1:03d}",
-            "question":    para[:200],
-            "response":    para[200:700] if len(para) > 200 else "See question.",
-        })
-    return questions
-
-
-def _score_to_level(avg_score: float) -> str:
-    if avg_score <= 1.5: return "Critical"
-    if avg_score <= 2.5: return "High"
-    if avg_score <= 3.5: return "Medium"
-    return "Low"
-
-
 def _build_batch_prompt(batch: list[dict], vendor: str, risks_summary: str) -> str:
     questions_text = "\n\n".join(
         f"ID: {q['question_id']}\n"
@@ -86,18 +45,36 @@ def _build_batch_prompt(batch: list[dict], vendor: str, risks_summary: str) -> s
         for q in batch
     )
     return f"""
-You are a cybersecurity auditor scoring a TPRA questionnaire.
+You are a cybersecurity auditor scoring a TPRA questionnaire. Be fair and calibrated.
 
 Vendor: {vendor}
 
 Identified risks context:
 {risks_summary if risks_summary else "No specific risks identified."}
 
-Score each question-response pair (1-4):
-- 1 = Non-compliant: Missing, off-topic, or critically incomplete
-- 2 = Partially compliant: Present but vague, without proof
-- 3 = Compliant: Complete and detailed but without concrete evidence
-- 4 = Mature: Complete, detailed, with evidence (certificates, audits)
+Score each question-response pair using this scale:
+
+- 1 = Non-compliant: Response is missing, off-topic, one word ("Yes.", "We comply."),
+      or has critical gaps with no explanation whatsoever.
+
+- 2 = Partially compliant: Response exists but is vague or generic. No named tools,
+      no process details, no concrete measures. Could apply to any company.
+
+- 3 = Compliant: Response is detailed and specific. Names tools, standards, or processes
+      (e.g. "We use AES-256", "We follow OWASP ASVS", "Our MDM pushes patches via X").
+      No attached proof required to reach this score.
+
+- 4 = Mature: Response is complete, specific AND references verifiable evidence
+      (audit reports, named certifications with scope, documented SLAs, test results).
+
+IMPORTANT calibration rules:
+- A response that names specific tools, standards, or concrete processes → minimum score 3.
+- Only downgrade to 2 if the response is genuinely vague despite being present.
+- Only score 1 if the response is absent, one-liner, or completely off-topic.
+- is_showstopper = true ONLY if score <= 2 AND the topic is CRITICAL
+  (data security, GDPR, incident response, encryption, certifications, access control).
+- Do NOT flag score=3 questions as showstoppers.
+- Process EVERY question, skip none.
 
 Questions to score:
 ---
@@ -111,7 +88,7 @@ Respond ONLY with valid JSON:
       "question_id": "2.1 AAC-01",
       "question": "Full question text",
       "response": "Vendor response (max 200 chars)",
-      "score": 2,
+      "score": 3,
       "justification": "Short explanation (max 100 chars)",
       "is_showstopper": false,
       "flag_reason": "Why flagged, or empty string",
@@ -119,12 +96,6 @@ Respond ONLY with valid JSON:
     }}
   ]
 }}
-
-Rules:
-- Score MUST be 1, 2, 3, or 4 only.
-- is_showstopper = true if score <= 2 AND topic is critical.
-- Process EVERY question, skip none.
-- Respond ONLY with JSON.
 """
 
 
@@ -144,9 +115,9 @@ async def score_responses(text: str, vendor: str, analysis: dict) -> ScoringResu
         for r in analysis.get("risks", [])
     )
 
-    questions = _parse_questions(text)
+    questions = parse_questions(text)
     if not questions:
-        questions = _fallback_parse(text)
+        questions = fallback_parse(text)
 
     batch_size = 25
     batches = [questions[i:i+batch_size] for i in range(0, len(questions), batch_size)]
@@ -190,12 +161,11 @@ async def score_responses(text: str, vendor: str, analysis: dict) -> ScoringResu
         if related_scores:
             avg = sum(related_scores) / len(related_scores)
         elif scores_by_id:
-            # No linked questions → use global average
             avg = sum(scores_by_id.values()) / len(scores_by_id)
         else:
             avg = 2.0
 
-        risk["level"] = _score_to_level(avg)
+        risk["level"] = score_to_level(avg)
 
     # Recalculate overall_score
     level_order = {"Critical": 4, "High": 3, "Medium": 2, "Low": 1}
@@ -229,8 +199,8 @@ Respond with ONLY the summary text.
     executive_summary = sr.choices[0].message.content.strip()
 
     # Stats
-    global_score = round(sum(s["score"] for s in unique_scores) / len(unique_scores), 2) if unique_scores else 0.0
-    low_score_count = sum(1 for s in unique_scores if s["score"] <= 2)
+    global_score      = round(sum(s["score"] for s in unique_scores) / len(unique_scores), 2) if unique_scores else 0.0
+    low_score_count   = sum(1 for s in unique_scores if s["score"] <= 2)
     showstopper_count = sum(1 for s in unique_scores if s["is_showstopper"])
 
     return ScoringResult(
@@ -238,7 +208,6 @@ Respond with ONLY the summary text.
         low_score_count=low_score_count,
         showstopper_count=showstopper_count,
         question_scores=[QuestionScore(**s) for s in unique_scores],
-        # Return updated analysis fields explicitly
         updated_risks=risks,
         overall_score=overall,
         final_decision=final_decision,

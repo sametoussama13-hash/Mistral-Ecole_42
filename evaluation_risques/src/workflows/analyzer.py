@@ -7,10 +7,11 @@ Returns risks WITH related_question_ids so scorer can recalculate levels.
 
 import json
 import os
-import re
 
 import mistralai.workflows as wfk
 from pydantic import BaseModel
+
+from workflows.utils import parse_questions, fallback_parse
 
 
 class Risk(BaseModel):
@@ -31,43 +32,7 @@ class RiskAnalysis(BaseModel):
     showstoppers: list[str]
 
 
-def _parse_questions(text: str) -> list[dict]:
-    questions = []
-    for line in text.split("\n"):
-        line = line.strip()
-        if not line:
-            continue
-        if re.match(r"^\d+\.\d+", line):
-            parts = line.split("\t")
-            if len(parts) >= 3:
-                questions.append({
-                    "question_id": parts[0].replace("*", "").strip(),
-                    "question":    parts[1].strip(),
-                    "response":    parts[2].strip(),
-                })
-            elif len(parts) == 2:
-                questions.append({
-                    "question_id": parts[0].replace("*", "").strip(),
-                    "question":    parts[1].strip(),
-                    "response":    "No response provided.",
-                })
-    return questions
-
-
-def _fallback_parse(text: str) -> list[dict]:
-    questions = []
-    paragraphs = [p.strip() for p in text.split("\n\n") if p.strip()]
-    for i, para in enumerate(paragraphs):
-        questions.append({
-            "question_id": f"P{i+1:03d}",
-            "question":    para[:200],
-            "response":    para[200:700] if len(para) > 200 else "See question.",
-        })
-    return questions
-
-
 def _build_batch_prompt(batch: list[dict], vendor: str, project: str) -> str:
-    # List all available question IDs for this batch
     available_ids = [q["question_id"] for q in batch]
     questions_text = "\n\n".join(
         f"ID: {q['question_id']}\n"
@@ -78,8 +43,9 @@ def _build_batch_prompt(batch: list[dict], vendor: str, project: str) -> str:
     return f"""
 You are a cybersecurity expert performing a TPRA for vendor "{vendor}", project "{project}".
 
-Analyze these question-response pairs and identify cybersecurity risks.
-READ THE ACTUAL RESPONSES carefully — base every finding on real content.
+Analyze these question-response pairs and identify REAL cybersecurity risks.
+Base every finding strictly on what the vendor actually said — do not invent risks
+from silence or assume worst case when a response is partial.
 
 Available question IDs in this batch: {available_ids}
 
@@ -87,7 +53,16 @@ Available question IDs in this batch: {available_ids}
 {questions_text}
 ---
 
-For each risk, specify which question IDs it relates to (use ONLY IDs from the list above).
+Rules:
+- Only raise a risk if the response reveals an actual gap or weakness.
+- A vague response is worth a follow-up question, not necessarily a risk.
+- A response that names tools, standards or concrete processes is NOT a risk by default.
+- related_question_ids must contain ONLY IDs from the available list above.
+- Showstoppers = genuine blocking issues only (missing encryption, no incident plan,
+  no certifications at all, explicit refusal to provide security controls, etc.)
+- Do NOT flag something as a showstopper just because evidence was not attached.
+- Do NOT include a "level" field — it will be computed from question scores.
+- Respond ONLY with JSON, no text before or after.
 
 Respond ONLY with valid JSON:
 {{
@@ -99,16 +74,10 @@ Respond ONLY with valid JSON:
       "related_question_ids": ["2.1 AAC-01", "2.2 AAC-02"]
     }}
   ],
-  "showstoppers": ["Critical blocking issue with question ID"],
+  "showstoppers": ["Critical blocking issue — only if genuinely blocking"],
   "exceptions": ["Exception found in responses"],
   "derogations": ["Derogation found in responses"]
 }}
-
-Rules:
-- Base EVERY risk on actual vendor responses, not assumptions.
-- related_question_ids must contain ONLY IDs from the available list above.
-- Do NOT include a "level" field — it will be computed from question scores.
-- Respond ONLY with JSON, no text before or after.
 """
 
 
@@ -122,9 +91,9 @@ async def analyze_risks(text: str, vendor: str, project: str) -> RiskAnalysis:
 
     client = Mistral(api_key=os.environ["MISTRAL_API_KEY"])
 
-    questions = _parse_questions(text)
+    questions = parse_questions(text)
     if not questions:
-        questions = _fallback_parse(text)
+        questions = fallback_parse(text)
 
     batch_size = 25
     batches = [questions[i:i+batch_size] for i in range(0, len(questions), batch_size)]
@@ -170,13 +139,12 @@ async def analyze_risks(text: str, vendor: str, project: str) -> RiskAnalysis:
     unique_exceptions   = list(dict.fromkeys(all_exceptions))
     unique_derogations  = list(dict.fromkeys(all_derogations))
 
-    # overall_score and final_decision are placeholders — recalculated after scoring
     return RiskAnalysis(
         executive_summary="",  # generated after scoring
         risks=[Risk(**r) for r in unique_risks],
         exceptions=unique_exceptions,
         derogations=unique_derogations,
-        overall_score="Medium",      # placeholder
-        final_decision="Pending",    # placeholder
+        overall_score="Medium",   # placeholder — recalculated after scoring
+        final_decision="Pending", # placeholder — recalculated after scoring
         showstoppers=unique_showstoppers,
     )
