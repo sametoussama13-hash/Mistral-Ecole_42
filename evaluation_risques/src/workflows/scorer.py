@@ -1,8 +1,8 @@
 """
 scorer.py
 =========
-Scores questions (1-4) AND recalculates risk levels from actual scores.
-Added: asyncio.sleep between batches to avoid rate limiting.
+Single-agent version.
+Scores questions (1-4), piece_jointe, showstoppers, recalculates risk levels.
 """
 
 import asyncio
@@ -15,6 +15,10 @@ from pydantic import BaseModel
 from workflows.utils import parse_questions, fallback_parse, score_to_level
 
 
+# ---------------------------------------------------------------------------
+# Modèles de données
+# ---------------------------------------------------------------------------
+
 class QuestionScore(BaseModel):
     question_id: str
     question: str
@@ -24,6 +28,7 @@ class QuestionScore(BaseModel):
     is_showstopper: bool
     flag_reason: str
     follow_up_question: str
+    piece_jointe: str = ""
 
 
 class ScoringResult(BaseModel):
@@ -37,11 +42,35 @@ class ScoringResult(BaseModel):
     executive_summary: str
 
 
+# ---------------------------------------------------------------------------
+# Helpers — troncature intelligente
+# ---------------------------------------------------------------------------
+
+_Q_MAX_CHARS = 600
+_R_MAX_CHARS = 1_200
+
+
+def _smart_truncate(text: str, max_chars: int) -> str:
+    """
+    Conserve début ET fin pour ne pas perdre certifications/audits
+    qui apparaissent souvent en fin de réponse.
+    """
+    if len(text) <= max_chars:
+        return text
+    keep = max_chars - 7
+    half = keep // 2
+    return text[:half] + " [...] " + text[-half:]
+
+
+# ---------------------------------------------------------------------------
+# Prompt builder
+# ---------------------------------------------------------------------------
+
 def _build_batch_prompt(batch: list[dict], vendor: str, risks_summary: str) -> str:
     questions_text = "\n\n".join(
         f"ID: {q['question_id']}\n"
-        f"Question: {q['question'][:300]}\n"
-        f"Response: {q['response'][:500]}"
+        f"Question: {_smart_truncate(q['question'], _Q_MAX_CHARS)}\n"
+        f"Response: {_smart_truncate(q['response'], _R_MAX_CHARS)}"
         for q in batch
     )
     return f"""
@@ -52,18 +81,43 @@ Vendor: {vendor}
 Identified risks context:
 {risks_summary if risks_summary else "No specific risks identified."}
 
-Score each question-response pair (1-4):
-- 1 = Non-compliant: Missing, off-topic, or one-liner with no substance
-- 2 = Partially compliant: Vague, generic, no named tools or processes
-- 3 = Compliant: Detailed, names tools/standards/processes (no proof needed)
-- 4 = Mature: Complete + references verifiable evidence (certs, audits, SLAs)
+Score each question-response pair using this scale:
+- 1 = Non-compliant: Response is missing, off-topic, one word ("Yes.", "We comply."),
+      or has critical gaps with no explanation whatsoever.
+- 2 = Partially compliant: Response exists but is vague or generic. No named tools,
+      no process details, no concrete measures. Could apply to any company.
+- 3 = Compliant: Response is detailed and specific. Names tools, standards, or processes
+      (e.g. "We use AES-256", "We follow OWASP ASVS", "Our MDM pushes patches via X").
+      No attached proof required to reach this score.
+- 4 = Mature: Response is complete, specific AND references verifiable evidence
+      (audit reports, named certifications with scope, documented SLAs, test results).
 
-Rules:
-- Names specific tools/standards → minimum score 3
-- is_showstopper = true ONLY if score <= 2 AND topic is critical
-- Process EVERY question, skip none
+Calibration rules:
+- A response naming specific tools, standards or concrete processes → minimum score 3.
+- Only score 2 if the response is genuinely vague despite being present.
+- Only score 1 if the response is absent, one-liner, or completely off-topic.
 
-Questions:
+Showstopper rules — is_showstopper = true ONLY if BOTH conditions are met:
+  1. Score is EXACTLY 1 (Non-compliant). Score 2, 3, or 4 → NEVER a showstopper.
+  2. AND the topic is one of these specific critical areas only:
+       - Data encryption at rest or in transit (absent or broken)
+       - GDPR compliance (no process at all for personal data protection)
+       - Personal data breach notification process (completely absent)
+       - Data access control (no authentication or authorization at all)
+       - Data residency / data sovereignty violation
+Any other topic, even with score 1, is NOT a showstopper.
+Score 2, 3, or 4 → NEVER a showstopper, no exceptions.
+
+Piece jointe rules:
+- Set "piece_jointe" to the name of the expected document if the question explicitly
+  asks for evidence, certificates, reports, or attachments (e.g. "attach ISO certificate",
+  "provide pentest report", "evidence of certification", "attach audit results").
+- If the vendor's response mentions providing a document but has not attached it, name it.
+- If no attachment is needed or already provided, set "piece_jointe" to "".
+
+Process EVERY question, skip none.
+
+Questions to score:
 ---
 {questions_text}
 ---
@@ -78,13 +132,18 @@ Respond ONLY with valid JSON:
       "score": 3,
       "justification": "Short explanation (max 100 chars)",
       "is_showstopper": false,
-      "flag_reason": "",
-      "follow_up_question": ""
+      "flag_reason": "Why flagged, or empty string",
+      "follow_up_question": "Follow-up if needed, or empty string",
+      "piece_jointe": "Expected document name, or empty string if none"
     }}
   ]
 }}
 """
 
+
+# ---------------------------------------------------------------------------
+# Activité unique
+# ---------------------------------------------------------------------------
 
 @wfk.activity()
 async def score_responses(text: str, vendor: str, analysis: dict) -> ScoringResult:
@@ -106,20 +165,18 @@ async def score_responses(text: str, vendor: str, analysis: dict) -> ScoringResu
         questions = fallback_parse(text)
 
     batch_size = 25
-    batches = [questions[i:i+batch_size] for i in range(0, len(questions), batch_size)]
+    batches    = [questions[i:i + batch_size] for i in range(0, len(questions), batch_size)]
     all_scores = []
 
     for i, batch in enumerate(batches):
         if not batch:
             continue
 
-        # Wait between batches to avoid rate limiting (except first batch)
         if i > 0:
             await asyncio.sleep(3)
 
         prompt = _build_batch_prompt(batch, vendor, risks_summary)
 
-        # Retry once on rate limit
         for attempt in range(2):
             try:
                 response = client.chat.complete(
@@ -137,7 +194,7 @@ async def score_responses(text: str, vendor: str, analysis: dict) -> ScoringResu
         data = json.loads(response.choices[0].message.content)
         all_scores.extend(data.get("question_scores", []))
 
-    # Deduplicate by question_id
+    # Déduplication + normalisation
     seen = set()
     unique_scores = []
     for s in all_scores:
@@ -148,23 +205,26 @@ async def score_responses(text: str, vendor: str, analysis: dict) -> ScoringResu
             s["is_showstopper"]     = bool(s.get("is_showstopper", False))
             s["flag_reason"]        = s.get("flag_reason", "")
             s["follow_up_question"] = s.get("follow_up_question", "")
+            s["piece_jointe"]       = str(s.get("piece_jointe", ""))
             unique_scores.append(s)
 
-    # Build lookup
     scores_by_id = {s["question_id"]: s["score"] for s in unique_scores}
 
-    # Recalculate risk levels
+    # Recalcul des niveaux de risque
     risks = analysis.get("risks", [])
     for risk in risks:
-        related_ids = risk.get("related_question_ids", [])
+        related_ids    = risk.get("related_question_ids", [])
         related_scores = [scores_by_id[qid] for qid in related_ids if qid in scores_by_id]
-        avg = sum(related_scores) / len(related_scores) if related_scores \
-              else (sum(scores_by_id.values()) / len(scores_by_id) if scores_by_id else 2.0)
+        avg = (
+            sum(related_scores) / len(related_scores)
+            if related_scores
+            else (sum(scores_by_id.values()) / len(scores_by_id) if scores_by_id else 2.0)
+        )
         risk["level"] = score_to_level(avg)
 
-    # Overall score + final decision
+    # Décision finale
     level_order = {"Critical": 4, "High": 3, "Medium": 2, "Low": 1}
-    overall = max(risks, key=lambda r: level_order.get(r["level"], 0))["level"] if risks else "Low"
+    overall      = max(risks, key=lambda r: level_order.get(r["level"], 0))["level"] if risks else "Low"
     showstoppers = analysis.get("showstoppers", [])
 
     if showstoppers or overall == "Critical":
@@ -174,19 +234,21 @@ async def score_responses(text: str, vendor: str, analysis: dict) -> ScoringResu
     else:
         final_decision = "Approved"
 
-    # Executive summary — also with rate limit protection
+    # Résumé exécutif
+    top_risks_str     = ", ".join(f'[{r["level"]}] {r["title"]}' for r in risks[:5])
+    executive_summary = f"{vendor} — {final_decision}. Overall risk: {overall}."
     await asyncio.sleep(2)
     for attempt in range(2):
         try:
             sr = client.chat.complete(
                 model="mistral-large-latest",
-                messages=[{"role": "user", "content": f"""
-Write a 3-4 sentence executive summary for vendor {vendor}.
-Decision: {final_decision} | Overall risk: {overall}
-Showstoppers: {len(showstoppers)}
-Top risks: {', '.join(f'[{r["level"]}] {r["title"]}' for r in risks[:5])}
-Respond with ONLY the summary text.
-"""}],
+                messages=[{"role": "user", "content": (
+                    f"Write a 3-4 sentence executive summary for vendor {vendor}.\n"
+                    f"Decision: {final_decision} | Overall risk: {overall}\n"
+                    f"Showstoppers: {len(showstoppers)}\n"
+                    f"Top risks: {top_risks_str}\n"
+                    f"Respond with ONLY the summary text."
+                )}],
                 temperature=0.2,
             )
             executive_summary = sr.choices[0].message.content.strip()
@@ -195,7 +257,7 @@ Respond with ONLY the summary text.
             if "429" in str(e) and attempt == 0:
                 await asyncio.sleep(10)
             else:
-                executive_summary = f"{vendor} — {final_decision}. Overall risk: {overall}."
+                break
 
     global_score      = round(sum(s["score"] for s in unique_scores) / len(unique_scores), 2) if unique_scores else 0.0
     low_score_count   = sum(1 for s in unique_scores if s["score"] <= 2)

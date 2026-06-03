@@ -50,10 +50,10 @@ class TPRAWorkflow(wfk.InteractiveWorkflow):
         scoring = await score_responses(text, input.vendor, analysis_dict)
 
         # Use updated values from scorer
-        final_decision = scoring.final_decision
-        overall_score = scoring.overall_score
+        final_decision    = scoring.final_decision
+        overall_score     = scoring.overall_score
         executive_summary = scoring.executive_summary
-        updated_risks = scoring.updated_risks
+        updated_risks     = scoring.updated_risks
 
         # Step 4: Generate text report
         report_analysis = {
@@ -75,31 +75,6 @@ class TPRAWorkflow(wfk.InteractiveWorkflow):
             f"Showstoppers: {scoring.showstopper_count}\n\n"
             f"{text_report}"
         )
-        # confirmation = await self.wait_for_input(
-        #     workflows_mistralai.AcceptDeclineConfirmation(
-        #         description=(
-        #             f"Review TPRA for {input.vendor} — "
-        #             f"Decision: {final_decision} | "
-        #             f"Score: {scoring.global_score:.1f}/4.0 | "
-        #             f"Showstoppers: {scoring.showstopper_count}. "
-        #             f"Approve to generate the Excel report."
-        #         ),
-        #         accept_label="Approve & Generate Excel",
-        #         decline_label="Reject",
-        #     )
-        # )
-
-        # if not workflows_mistralai.is_accepted(confirmation):
-        #     return json.dumps({
-        #         "status":         "rejected_by_analyst",
-        #         "vendor":         input.vendor,
-        #         "project":        input.project,
-        #         "analyst":        input.analyst,
-        #         "final_decision": final_decision,
-        #         "overall_score":  overall_score,
-        #         "global_score":   scoring.global_score,
-        #         "message":        f"Report manually rejected by {input.analyst}.",
-        #     })
 
         # Step 6: Export Excel
         excel_path = await export_excel(
@@ -133,6 +108,7 @@ class TPRAWorkflow(wfk.InteractiveWorkflow):
                     "is_showstopper":     q.is_showstopper,
                     "flag_reason":        q.flag_reason,
                     "follow_up_question": q.follow_up_question,
+                    "piece_jointe":       q.piece_jointe,
                 }
                 for q in scoring.question_scores
             ],
