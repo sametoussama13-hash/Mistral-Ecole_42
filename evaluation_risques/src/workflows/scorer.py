@@ -2,9 +2,10 @@
 scorer.py
 =========
 Scores questions (1-4) AND recalculates risk levels from actual scores.
-Returns both ScoringResult AND updated analysis fields.
+Added: asyncio.sleep between batches to avoid rate limiting.
 """
 
+import asyncio
 import json
 import os
 
@@ -30,7 +31,6 @@ class ScoringResult(BaseModel):
     low_score_count: int
     showstopper_count: int
     question_scores: list[QuestionScore]
-    # Updated analysis fields — returned explicitly so router can use them
     updated_risks: list[dict]
     overall_score: str
     final_decision: str
@@ -52,31 +52,18 @@ Vendor: {vendor}
 Identified risks context:
 {risks_summary if risks_summary else "No specific risks identified."}
 
-Score each question-response pair using this scale:
+Score each question-response pair (1-4):
+- 1 = Non-compliant: Missing, off-topic, or one-liner with no substance
+- 2 = Partially compliant: Vague, generic, no named tools or processes
+- 3 = Compliant: Detailed, names tools/standards/processes (no proof needed)
+- 4 = Mature: Complete + references verifiable evidence (certs, audits, SLAs)
 
-- 1 = Non-compliant: Response is missing, off-topic, one word ("Yes.", "We comply."),
-      or has critical gaps with no explanation whatsoever.
+Rules:
+- Names specific tools/standards → minimum score 3
+- is_showstopper = true ONLY if score <= 2 AND topic is critical
+- Process EVERY question, skip none
 
-- 2 = Partially compliant: Response exists but is vague or generic. No named tools,
-      no process details, no concrete measures. Could apply to any company.
-
-- 3 = Compliant: Response is detailed and specific. Names tools, standards, or processes
-      (e.g. "We use AES-256", "We follow OWASP ASVS", "Our MDM pushes patches via X").
-      No attached proof required to reach this score.
-
-- 4 = Mature: Response is complete, specific AND references verifiable evidence
-      (audit reports, named certifications with scope, documented SLAs, test results).
-
-IMPORTANT calibration rules:
-- A response that names specific tools, standards, or concrete processes → minimum score 3.
-- Only downgrade to 2 if the response is genuinely vague despite being present.
-- Only score 1 if the response is absent, one-liner, or completely off-topic.
-- is_showstopper = true ONLY if score <= 2 AND the topic is CRITICAL
-  (data security, GDPR, incident response, encryption, certifications, access control).
-- Do NOT flag score=3 questions as showstoppers.
-- Process EVERY question, skip none.
-
-Questions to score:
+Questions:
 ---
 {questions_text}
 ---
@@ -91,8 +78,8 @@ Respond ONLY with valid JSON:
       "score": 3,
       "justification": "Short explanation (max 100 chars)",
       "is_showstopper": false,
-      "flag_reason": "Why flagged, or empty string",
-      "follow_up_question": "Follow-up if needed, or empty string"
+      "flag_reason": "",
+      "follow_up_question": ""
     }}
   ]
 }}
@@ -102,9 +89,8 @@ Respond ONLY with valid JSON:
 @wfk.activity()
 async def score_responses(text: str, vendor: str, analysis: dict) -> ScoringResult:
     """
-    1. Scores every question (1-4)
-    2. Recalculates risk levels from actual question scores
-    3. Returns everything in ScoringResult (including updated risks)
+    Scores every question (1-4), recalculates risk levels.
+    Adds 3s delay between batches to avoid rate limiting.
     """
     from mistralai.client import Mistral
 
@@ -123,19 +109,35 @@ async def score_responses(text: str, vendor: str, analysis: dict) -> ScoringResu
     batches = [questions[i:i+batch_size] for i in range(0, len(questions), batch_size)]
     all_scores = []
 
-    for batch in batches:
+    for i, batch in enumerate(batches):
         if not batch:
             continue
+
+        # Wait between batches to avoid rate limiting (except first batch)
+        if i > 0:
+            await asyncio.sleep(3)
+
         prompt = _build_batch_prompt(batch, vendor, risks_summary)
-        response = client.chat.complete(
-            model="mistral-large-latest",
-            messages=[{"role": "user", "content": prompt}],
-            response_format={"type": "json_object"},
-        )
+
+        # Retry once on rate limit
+        for attempt in range(2):
+            try:
+                response = client.chat.complete(
+                    model="mistral-large-latest",
+                    messages=[{"role": "user", "content": prompt}],
+                    response_format={"type": "json_object"},
+                )
+                break
+            except Exception as e:
+                if "429" in str(e) and attempt == 0:
+                    await asyncio.sleep(10)
+                else:
+                    raise
+
         data = json.loads(response.choices[0].message.content)
         all_scores.extend(data.get("question_scores", []))
 
-    # Deduplicate
+    # Deduplicate by question_id
     seen = set()
     unique_scores = []
     for s in all_scores:
@@ -148,33 +150,23 @@ async def score_responses(text: str, vendor: str, analysis: dict) -> ScoringResu
             s["follow_up_question"] = s.get("follow_up_question", "")
             unique_scores.append(s)
 
-    # Build lookup: question_id → score
+    # Build lookup
     scores_by_id = {s["question_id"]: s["score"] for s in unique_scores}
 
-    # Recalculate risk levels from linked question scores
+    # Recalculate risk levels
     risks = analysis.get("risks", [])
     for risk in risks:
         related_ids = risk.get("related_question_ids", [])
         related_scores = [scores_by_id[qid] for qid in related_ids if qid in scores_by_id]
-
-        if related_scores:
-            avg = sum(related_scores) / len(related_scores)
-        elif scores_by_id:
-            avg = sum(scores_by_id.values()) / len(scores_by_id)
-        else:
-            avg = 2.0
-
+        avg = sum(related_scores) / len(related_scores) if related_scores \
+              else (sum(scores_by_id.values()) / len(scores_by_id) if scores_by_id else 2.0)
         risk["level"] = score_to_level(avg)
 
-    # Recalculate overall_score
+    # Overall score + final decision
     level_order = {"Critical": 4, "High": 3, "Medium": 2, "Low": 1}
-    if risks:
-        overall = max(risks, key=lambda r: level_order.get(r["level"], 0))["level"]
-    else:
-        overall = "Low"
-
-    # Recalculate final_decision
+    overall = max(risks, key=lambda r: level_order.get(r["level"], 0))["level"] if risks else "Low"
     showstoppers = analysis.get("showstoppers", [])
+
     if showstoppers or overall == "Critical":
         final_decision = "Rejected"
     elif overall == "High":
@@ -182,22 +174,29 @@ async def score_responses(text: str, vendor: str, analysis: dict) -> ScoringResu
     else:
         final_decision = "Approved"
 
-    # Generate executive summary
-    summary_prompt = f"""
+    # Executive summary — also with rate limit protection
+    await asyncio.sleep(2)
+    for attempt in range(2):
+        try:
+            sr = client.chat.complete(
+                model="mistral-large-latest",
+                messages=[{"role": "user", "content": f"""
 Write a 3-4 sentence executive summary for vendor {vendor}.
 Decision: {final_decision} | Overall risk: {overall}
 Showstoppers: {len(showstoppers)}
 Top risks: {', '.join(f'[{r["level"]}] {r["title"]}' for r in risks[:5])}
 Respond with ONLY the summary text.
-"""
-    sr = client.chat.complete(
-        model="mistral-large-latest",
-        messages=[{"role": "user", "content": summary_prompt}],
-        temperature=0.2,
-    )
-    executive_summary = sr.choices[0].message.content.strip()
+"""}],
+                temperature=0.2,
+            )
+            executive_summary = sr.choices[0].message.content.strip()
+            break
+        except Exception as e:
+            if "429" in str(e) and attempt == 0:
+                await asyncio.sleep(10)
+            else:
+                executive_summary = f"{vendor} — {final_decision}. Overall risk: {overall}."
 
-    # Stats
     global_score      = round(sum(s["score"] for s in unique_scores) / len(unique_scores), 2) if unique_scores else 0.0
     low_score_count   = sum(1 for s in unique_scores if s["score"] <= 2)
     showstopper_count = sum(1 for s in unique_scores if s["is_showstopper"])

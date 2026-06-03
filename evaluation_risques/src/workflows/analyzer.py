@@ -3,8 +3,10 @@ analyzer.py
 ===========
 Analyzes vendor responses — Use Case 2.
 Returns risks WITH related_question_ids so scorer can recalculate levels.
+Added: asyncio.sleep between batches to avoid rate limiting.
 """
 
+import asyncio
 import json
 import os
 
@@ -16,10 +18,10 @@ from workflows.utils import parse_questions, fallback_parse
 
 class Risk(BaseModel):
     title: str
-    level: str                        # recalculated by scorer from question scores
+    level: str
     description: str
     recommendation: str
-    related_question_ids: list[str]   # links risk → questions
+    related_question_ids: list[str]
 
 
 class RiskAnalysis(BaseModel):
@@ -44,8 +46,7 @@ def _build_batch_prompt(batch: list[dict], vendor: str, project: str) -> str:
 You are a cybersecurity expert performing a TPRA for vendor "{vendor}", project "{project}".
 
 Analyze these question-response pairs and identify REAL cybersecurity risks.
-Base every finding strictly on what the vendor actually said — do not invent risks
-from silence or assume worst case when a response is partial.
+Base every finding strictly on what the vendor actually said.
 
 Available question IDs in this batch: {available_ids}
 
@@ -55,12 +56,8 @@ Available question IDs in this batch: {available_ids}
 
 Rules:
 - Only raise a risk if the response reveals an actual gap or weakness.
-- A vague response is worth a follow-up question, not necessarily a risk.
-- A response that names tools, standards or concrete processes is NOT a risk by default.
 - related_question_ids must contain ONLY IDs from the available list above.
-- Showstoppers = genuine blocking issues only (missing encryption, no incident plan,
-  no certifications at all, explicit refusal to provide security controls, etc.)
-- Do NOT flag something as a showstopper just because evidence was not attached.
+- Showstoppers = genuine blocking issues only.
 - Do NOT include a "level" field — it will be computed from question scores.
 - Respond ONLY with JSON, no text before or after.
 
@@ -71,7 +68,7 @@ Respond ONLY with valid JSON:
       "title": "Short risk name",
       "description": "Risk based on actual vendor response",
       "recommendation": "Concrete mitigation action",
-      "related_question_ids": ["2.1 AAC-01", "2.2 AAC-02"]
+      "related_question_ids": ["2.1 AAC-01"]
     }}
   ],
   "showstoppers": ["Critical blocking issue — only if genuinely blocking"],
@@ -85,7 +82,8 @@ Respond ONLY with valid JSON:
 async def analyze_risks(text: str, vendor: str, project: str) -> RiskAnalysis:
     """
     Identifies risks and links them to question IDs.
-    Level is NOT set here — it will be recalculated by scorer from actual scores.
+    Level is NOT set here — recalculated by scorer from actual scores.
+    Adds 3s delay between batches to avoid rate limiting.
     """
     from mistralai.client import Mistral
 
@@ -103,22 +101,38 @@ async def analyze_risks(text: str, vendor: str, project: str) -> RiskAnalysis:
     all_exceptions = []
     all_derogations = []
 
-    for batch in batches:
+    for i, batch in enumerate(batches):
         if not batch:
             continue
+
+        # Wait between batches to avoid rate limiting (except first batch)
+        if i > 0:
+            await asyncio.sleep(3)
+
         prompt = _build_batch_prompt(batch, vendor, project)
-        response = client.chat.complete(
-            model="mistral-large-latest",
-            messages=[{"role": "user", "content": prompt}],
-            response_format={"type": "json_object"},
-            temperature=0.2,
-        )
+
+        # Retry once on rate limit
+        for attempt in range(2):
+            try:
+                response = client.chat.complete(
+                    model="mistral-large-latest",
+                    messages=[{"role": "user", "content": prompt}],
+                    response_format={"type": "json_object"},
+                    temperature=0.2,
+                )
+                break
+            except Exception as e:
+                if "429" in str(e) and attempt == 0:
+                    await asyncio.sleep(10)  # wait 10s on rate limit then retry
+                else:
+                    raise
+
         data = json.loads(response.choices[0].message.content)
 
         for r in data.get("risks", []):
             all_risks.append({
                 "title":                r.get("title", ""),
-                "level":               "Medium",  # placeholder — recalculated later
+                "level":               "Medium",  # placeholder
                 "description":         r.get("description", ""),
                 "recommendation":      r.get("recommendation", ""),
                 "related_question_ids": r.get("related_question_ids", []),
@@ -135,16 +149,12 @@ async def analyze_risks(text: str, vendor: str, project: str) -> RiskAnalysis:
             seen_titles.add(r["title"])
             unique_risks.append(r)
 
-    unique_showstoppers = list(dict.fromkeys(all_showstoppers))
-    unique_exceptions   = list(dict.fromkeys(all_exceptions))
-    unique_derogations  = list(dict.fromkeys(all_derogations))
-
     return RiskAnalysis(
-        executive_summary="",  # generated after scoring
+        executive_summary="",
         risks=[Risk(**r) for r in unique_risks],
-        exceptions=unique_exceptions,
-        derogations=unique_derogations,
-        overall_score="Medium",   # placeholder — recalculated after scoring
-        final_decision="Pending", # placeholder — recalculated after scoring
-        showstoppers=unique_showstoppers,
+        exceptions=list(dict.fromkeys(all_exceptions)),
+        derogations=list(dict.fromkeys(all_derogations)),
+        overall_score="Medium",
+        final_decision="Pending",
+        showstoppers=list(dict.fromkeys(all_showstoppers)),
     )
