@@ -1183,15 +1183,39 @@ function TabShowstoppers({ result }) {
 }
 
 // ── Detail Modal (lecture seule, rapport complet) ─────────────────────────────
-function DetailModal({ ticket: initialTicket, onClose, onDone }) {
+function DetailModal({ ticket: initialTicket, onClose, onDone, dark=true }) {
   const [ticket, setTicket]     = useState(initialTicket);
-  const [fetching, setFetching] = useState(false);
+  const [fetching, setFetching] = useState(true);
   const [comments, setComments] = useState("");
   const [loading, setLoading]   = useState(false);
   const [tab, setTab]           = useState("overview");
 
-  // Recharge le ticket complet depuis l'API au montage
-  // car la liste ne renvoie pas forcément le champ result
+  const D = dark ? {
+    bg:       "#0d1e3a",
+    surface:  "rgba(255,255,255,0.05)",
+    surfHigh: "rgba(255,255,255,0.08)",
+    border:   "rgba(255,255,255,0.1)",
+    text:     "#ffffff",
+    muted:    "rgba(255,255,255,0.5)",
+    faint:    "rgba(255,255,255,0.25)",
+    overlay:  "rgba(0,0,0,0.7)",
+    footerBg: "rgba(0,0,0,0.3)",
+    inputBg:  "rgba(255,255,255,0.05)",
+    tabActive:"#E30613",
+  } : {
+    bg:       "#ffffff",
+    surface:  "#f8fafc",
+    surfHigh: "#f1f5f9",
+    border:   "#e2e8f0",
+    text:     "#0f172a",
+    muted:    "#64748b",
+    faint:    "#94a3b8",
+    overlay:  "rgba(0,0,0,0.35)",
+    footerBg: "#f8fafc",
+    inputBg:  "#ffffff",
+    tabActive:"#E30613",
+  };
+
   useEffect(() => {
     setFetching(true);
     fetch(`${API}/tickets/${initialTicket.id}`)
@@ -1200,15 +1224,21 @@ function DetailModal({ ticket: initialTicket, onClose, onDone }) {
       .catch(() => setFetching(false));
   }, [initialTicket.id]);
 
-  const result       = ticket.result || ticket; // résultat à plat ou dans result
+  const result       = ticket.result || ticket;
   const isValidation = ticket.status === "waiting_validation";
   const hasResult    = !!(result.question_scores?.length > 0 || result.final_decision || result.executive_summary);
+  const decision     = result.final_decision;
+  const isApproved   = decision === "Approved";
+  const isRejected   = decision === "Rejected";
+  const byHuman      = ticket.validated_by && ticket.validated_by !== "auto";
+  const showstoppers = result.question_scores?.filter(q => q.is_showstopper) || [];
+  const ssCount      = result.showstopper_count || showstoppers.length || 0;
 
   const tabs = [
-    { key:"overview",     label:"Résumé" },
+    { key:"overview", label:"Résumé" },
     ...(result.question_scores?.length > 0 ? [{ key:"questions", label:`Questions (${result.question_scores.length})` }] : []),
-    ...(result.risks?.length > 0           ? [{ key:"risks",     label:`Risques (${result.risks.length})` }]            : []),
-    ...(result.question_scores?.some(q=>q.is_showstopper) ? [{ key:"showstoppers", label:`Showstoppers (${result.showstopper_count || result.question_scores.filter(q=>q.is_showstopper).length})` }] : []),
+    ...(result.risks?.length > 0           ? [{ key:"risks",     label:`Risques (${result.risks.length})` }] : []),
+    ...(ssCount > 0 ? [{ key:"showstoppers", label:`Showstoppers (${ssCount})`, red:true }] : []),
   ];
 
   async function send(approved) {
@@ -1220,106 +1250,451 @@ function DetailModal({ ticket: initialTicket, onClose, onDone }) {
     setLoading(false); onDone();
   }
 
-  return (
-    <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.2)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:1000 }}>
-      <div style={{ background:"#fff", borderRadius:16, width:"min(860px,96vw)", maxHeight:"92vh", display:"flex", flexDirection:"column", boxShadow:"0 20px 60px rgba(0,0,0,0.1)", border:"1px solid #E5E7EB" }}>
+  // ── Sub-components themed ──────────────────────────────────────────────────
 
-        {/* Fixed header */}
-        <div style={{ padding:"24px 28px 0", flexShrink:0 }}>
-          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:16 }}>
+  function KpiCard({ label, value, color }) {
+    return (
+      <div style={{ background:D.surface, border:`1px solid ${D.border}`, borderRadius:10, padding:"12px 16px", position:"relative", overflow:"hidden" }}>
+        <div style={{ position:"absolute", top:0, left:0, right:0, height:2, background:color, opacity:0.6 }} />
+        <div style={{ fontSize:9, fontWeight:700, letterSpacing:"0.1em", color:D.faint, marginBottom:6 }}>{label.toUpperCase()}</div>
+        <div style={{ fontSize:22, fontWeight:800, color: color || D.text, letterSpacing:"-0.02em" }}>{value||"—"}</div>
+      </div>
+    );
+  }
+
+  function OverviewTab() {
+    const decColor = isApproved ? "#34D399" : isRejected ? "#F87171" : D.muted;
+    const riskColor = { Critical:"#F87171", High:"#F97316", Medium:"#FBBF24", Low:"#34D399" }[result.overall_score] || D.muted;
+    const scores    = result.question_scores || [];
+    const counts    = scores.reduce((a,q)=>{ a[q.score]=(a[q.score]||0)+1; return a; },{});
+    const total     = scores.length || 1;
+    const SCORE_C   = { 4:"#34D399", 3:"#FBBF24", 2:"#F97316", 1:"#F87171" };
+
+    return (
+      <div>
+        {/* Decision banner */}
+        {decision && (
+          <div style={{ display:"flex", alignItems:"center", gap:12, padding:"14px 16px", borderRadius:12, marginBottom:20,
+            background: isApproved ? "rgba(52,211,153,0.08)" : isRejected ? "rgba(227,6,19,0.08)" : D.surface,
+            border: isApproved ? "1px solid rgba(52,211,153,0.2)" : isRejected ? "1px solid rgba(227,6,19,0.2)" : `1px solid ${D.border}` }}>
+            <div style={{ width:36, height:36, borderRadius:10, background: isApproved?"rgba(52,211,153,0.15)":"rgba(227,6,19,0.15)", display:"flex", alignItems:"center", justifyContent:"center" }}>
+              {isApproved
+                ? <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#34D399" strokeWidth="2.5" strokeLinecap="round"><polyline points="20 6 9 17 4 12"/></svg>
+                : <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#F87171" strokeWidth="2.5" strokeLinecap="round"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>}
+            </div>
             <div>
-              <div style={{ fontSize:17, fontWeight:600, color:"#0F172A" }}>{ticket.vendor}</div>
-              <div style={{ display:"flex", gap:8, alignItems:"center", marginTop:4, flexWrap:"wrap" }}>
-                {ticket.project && <span style={{ color:"#9CA3AF", fontSize:12 }}>{ticket.project}</span>}
-                {ticket.analyst && <span style={{ color:"#9CA3AF", fontSize:12 }}>· {ticket.analyst}</span>}
-                {ticket.created_at && <span style={{ color:"#9CA3AF", fontSize:12 }}>· {fmtDate(ticket.created_at)}</span>}
+              <div style={{ fontWeight:700, fontSize:14, color: isApproved?"#34D399":"#F87171" }}>Décision finale : {decision}</div>
+              {result.overall_score && <div style={{ fontSize:12, color:D.muted, marginTop:2 }}>Niveau de risque global : <span style={{ color:riskColor, fontWeight:600 }}>{result.overall_score}</span></div>}
+            </div>
+          </div>
+        )}
+
+        {/* KPI grid 2x4 */}
+        <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:10, marginBottom:20 }}>
+          <KpiCard label="Décision"        value={decision}                                       color={decColor} />
+          <KpiCard label="Niveau de risque" value={result.overall_score}                          color={riskColor} />
+          <KpiCard label="Score global"    value={result.global_score!=null?`${result.global_score}/4`:null} color="#7A96D4" />
+          <KpiCard label="Questions"       value={result.question_scores?.length}                 color={D.muted} />
+          <KpiCard label="Showstoppers"    value={ssCount}                                        color={ssCount>0?"#F87171":"#34D399"} />
+          <KpiCard label="Scores ≤ 2"     value={scores.filter(q=>q.score<=2).length||null}      color="#F97316" />
+          <KpiCard label="Risques identifiés" value={result.risks?.length}                        color="#7A96D4" />
+          <KpiCard label="Analyste"        value={ticket.validated_by==="auto"?"Auto":ticket.analyst} color={D.muted} />
+        </div>
+
+        {/* Executive summary */}
+        {result.executive_summary && (
+          <div style={{ background:D.surface, border:`1px solid ${D.border}`, borderRadius:12, padding:"14px 16px", marginBottom:20 }}>
+            <div style={{ fontSize:10, fontWeight:700, letterSpacing:"0.1em", color:D.faint, marginBottom:8 }}>RÉSUMÉ EXÉCUTIF</div>
+            <p style={{ color:D.text, fontSize:13, lineHeight:1.75, margin:0 }}>{result.executive_summary}</p>
+          </div>
+        )}
+
+        {/* Showstoppers preview */}
+        {ssCount > 0 && result.showstoppers?.length > 0 && (
+          <div style={{ marginBottom:20 }}>
+            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:10 }}>
+              <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+                <div style={{ width:3, height:16, borderRadius:2, background:"#F87171" }} />
+                <span style={{ fontSize:13, fontWeight:700, color:"#F87171" }}>SHOWSTOPPERS ({ssCount})</span>
+              </div>
+              {tabs.find(t=>t.key==="showstoppers") &&
+                <button onClick={()=>setTab("showstoppers")} style={{ background:"none", border:"none", color:"#F87171", fontSize:11, fontWeight:600, cursor:"pointer" }}>Voir le détail →</button>}
+            </div>
+            {result.showstoppers.map((s,i) => (
+              <div key={i} style={{ display:"flex", alignItems:"flex-start", gap:8, padding:"10px 14px", borderRadius:8, marginBottom:6, background:"rgba(248,113,113,0.07)", border:"1px solid rgba(248,113,113,0.18)" }}>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#F87171" strokeWidth="2.5" strokeLinecap="round" style={{flexShrink:0,marginTop:1}}><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>
+                <span style={{ color:"#F87171", fontSize:12, lineHeight:1.5 }}>{s}</span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Score distribution bar */}
+        {scores.length > 0 && (
+          <div style={{ background:D.surface, border:`1px solid ${D.border}`, borderRadius:12, padding:"14px 16px", marginBottom:20 }}>
+            <div style={{ fontSize:10, fontWeight:700, letterSpacing:"0.1em", color:D.faint, marginBottom:12 }}>DISTRIBUTION DES SCORES</div>
+            <div style={{ display:"flex", height:10, borderRadius:6, overflow:"hidden", marginBottom:12 }}>
+              {[4,3,2,1].map(s => counts[s] ? (
+                <div key={s} style={{ flex:counts[s], background:SCORE_C[s], transition:"flex 0.3s" }} title={`${s}/4 : ${counts[s]}`} />
+              ) : null)}
+            </div>
+            <div style={{ display:"flex", gap:16, flexWrap:"wrap" }}>
+              {[4,3,2,1].filter(s=>counts[s]).map(s=>(
+                <div key={s} style={{ display:"flex", alignItems:"center", gap:6 }}>
+                  <div style={{ width:9, height:9, borderRadius:3, background:SCORE_C[s] }} />
+                  <span style={{ color:D.muted, fontSize:11 }}>
+                    {counts[s]} {["","Non-conforme","Partiel","Conforme","Mature"][s]} ({Math.round(counts[s]/total*100)}%)
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Risks preview */}
+        {result.risks?.length > 0 && (
+          <div>
+            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:10 }}>
+              <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+                <div style={{ width:3, height:16, borderRadius:2, background:"#7A96D4" }} />
+                <span style={{ fontSize:13, fontWeight:700, color:D.text }}>RISQUES IDENTIFIÉS ({result.risks.length})</span>
+              </div>
+              <button onClick={()=>setTab("risks")} style={{ background:"none", border:"none", color:"#7A96D4", fontSize:11, fontWeight:600, cursor:"pointer" }}>Voir tous →</button>
+            </div>
+            {result.risks.slice(0,3).map((r,i) => {
+              const rc = { Critical:"#F87171", High:"#F97316", Medium:"#FBBF24", Low:"#34D399" }[r.level]||D.muted;
+              return (
+                <div key={i} style={{ display:"flex", alignItems:"center", gap:10, padding:"9px 0", borderBottom:`1px solid ${D.border}` }}>
+                  <span style={{ padding:"2px 8px", borderRadius:6, fontSize:10, fontWeight:700, background:`rgba(${rc==="#F87171"?"248,113,113":rc==="#F97316"?"249,115,22":rc==="#FBBF24"?"251,191,36":"52,211,153"},0.12)`, color:rc, flexShrink:0 }}>{r.level}</span>
+                  <span style={{ color:D.text, fontSize:12, flex:1, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{r.title}</span>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  function QuestionsTab() {
+    const [search, setSearch] = useState("");
+    const [sf, setSf] = useState("all");
+    const [exp, setExp] = useState(null);
+    const SCORE_C = { 4:"#34D399", 3:"#FBBF24", 2:"#F97316", 1:"#F87171" };
+    const SCORE_BG = { 4:"rgba(52,211,153,0.1)", 3:"rgba(251,191,36,0.1)", 2:"rgba(249,115,22,0.1)", 1:"rgba(248,113,113,0.1)" };
+    const LABELS = { 1:"Non-conforme", 2:"Partiel", 3:"Conforme", 4:"Mature" };
+    const qs = (result.question_scores||[]).filter(q => {
+      const ms = !search || q.question?.toLowerCase().includes(search.toLowerCase()) || q.question_id?.toLowerCase().includes(search.toLowerCase());
+      return ms && (sf==="all" || String(q.score)===sf);
+    });
+    const cnts = (result.question_scores||[]).reduce((a,q)=>{a[q.score]=(a[q.score]||0)+1;return a;},{});
+    return (
+      <div>
+        <div style={{ display:"flex", gap:8, marginBottom:12, flexWrap:"wrap", alignItems:"center", justifyContent:"space-between" }}>
+          <div style={{ display:"flex", gap:4 }}>
+            {["all","4","3","2","1"].map(s=>{
+              const active=sf===s;
+              const c=s==="all"?D.text:SCORE_C[+s];
+              return <button key={s} onClick={()=>setSf(active&&s!=="all"?"all":s)}
+                style={{ padding:"3px 9px", borderRadius:8, fontSize:10, fontWeight:600, cursor:"pointer",
+                  background:active?(s==="all"?D.surfHigh:SCORE_BG[+s]):"transparent",
+                  border:active?`1px solid ${c}33`:`1px solid transparent`, color:active?c:D.faint }}>
+                {s==="all"?"Tous":`${s}/4`}{s!=="all"&&cnts[+s]?` (${cnts[+s]})`:""}
+              </button>;
+            })}
+          </div>
+          <div style={{ position:"relative" }}>
+            <span style={{ position:"absolute",left:8,top:"50%",transform:"translateY(-50%)",color:D.faint,display:"flex" }}>
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            </span>
+            <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Rechercher…"
+              style={{ padding:"5px 10px 5px 24px", borderRadius:7, background:D.inputBg, border:`1px solid ${D.border}`, color:D.text, fontSize:11, outline:"none" }} />
+          </div>
+        </div>
+        <div style={{ border:`1px solid ${D.border}`, borderRadius:10, overflow:"hidden" }}>
+          {qs.length===0 ? <div style={{ padding:24, textAlign:"center", color:D.faint, fontSize:12 }}>Aucune question</div>
+          : qs.map((q,i) => {
+            const c=SCORE_C[q.score]||D.faint;
+            const isEx=exp===q.question_id;
+            return (
+              <div key={q.question_id} onClick={()=>setExp(isEx?null:q.question_id)}
+                style={{ borderBottom:i<qs.length-1?`1px solid ${D.border}`:"none", cursor:"pointer", background:isEx?D.surfHigh:"transparent", transition:"background 0.1s" }}>
+                <div style={{ display:"flex", alignItems:"flex-start", gap:10, padding:"10px 14px" }}>
+                  <div style={{ width:3, height:36, borderRadius:2, background:c, flexShrink:0, marginTop:2 }} />
+                  <span style={{ background:SCORE_BG[q.score]||D.surface, color:c, fontSize:9, fontWeight:800, padding:"2px 6px", borderRadius:4, whiteSpace:"nowrap", flexShrink:0, fontFamily:"monospace", marginTop:2 }}>{q.question_id}</span>
+                  <div style={{ flex:1, minWidth:0 }}>
+                    <div style={{ color:D.text, fontSize:12, lineHeight:1.5, overflow:isEx?"visible":"hidden", textOverflow:"ellipsis", whiteSpace:isEx?"normal":"nowrap" }}>{q.question}</div>
+                    {isEx && (
+                      <div style={{ marginTop:8 }}>
+                        {q.response && <div style={{ marginBottom:6 }}>
+                          <div style={{ fontSize:9, fontWeight:700, color:D.faint, letterSpacing:"0.08em", marginBottom:3 }}>RÉPONSE FOURNISSEUR</div>
+                          <div style={{ color:D.muted, fontSize:11, lineHeight:1.6, borderLeft:`2px solid rgba(${c==="#34D399"?"52,211,153":c==="#FBBF24"?"251,191,36":c==="#F97316"?"249,115,22":"248,113,113"},0.3)`, paddingLeft:8 }}>{q.response}</div>
+                        </div>}
+                        {q.justification && <div style={{ marginBottom:6 }}>
+                          <div style={{ fontSize:9, fontWeight:700, color:D.faint, letterSpacing:"0.08em", marginBottom:3 }}>JUSTIFICATION</div>
+                          <div style={{ color:D.muted, fontSize:11, lineHeight:1.6, borderLeft:`2px solid ${D.border}`, paddingLeft:8 }}>{q.justification}</div>
+                        </div>}
+                        {q.follow_up_question && <div style={{ background:"rgba(122,150,212,0.08)", borderRadius:6, padding:"6px 10px", border:"1px solid rgba(122,150,212,0.2)" }}>
+                          <span style={{ fontSize:9, fontWeight:700, color:"#7A96D4" }}>❓ </span>
+                          <span style={{ fontSize:11, color:"#7A96D4" }}>{q.follow_up_question}</span>
+                        </div>}
+                      </div>
+                    )}
+                  </div>
+                  <div style={{ display:"flex", alignItems:"center", gap:6, flexShrink:0 }}>
+                    <span style={{ background:SCORE_BG[q.score], color:c, fontSize:10, fontWeight:700, padding:"2px 7px", borderRadius:6, border:`1px solid ${c}33` }}>{q.score}/4 · {LABELS[q.score]}</span>
+                    {q.is_showstopper && <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#F87171" strokeWidth="2.5" strokeLinecap="round"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>}
+                    <span style={{ color:D.faint, fontSize:10, transform:isEx?"rotate(180deg)":"none", display:"inline-block", transition:"transform 0.2s" }}>▾</span>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
+
+  function RisksTab() {
+    const [exp, setExp] = useState(null);
+    const risks = result.risks || [];
+    const byLevel = ["Critical","High","Medium","Low"];
+    const RC = { Critical:"#F87171", High:"#F97316", Medium:"#FBBF24", Low:"#34D399" };
+    const RBG = { Critical:"rgba(248,113,113,0.1)", High:"rgba(249,115,22,0.1)", Medium:"rgba(251,191,36,0.1)", Low:"rgba(52,211,153,0.1)" };
+    if (!risks.length) return <div style={{ padding:32, textAlign:"center", color:D.faint }}>Aucun risque documenté</div>;
+    return (
+      <div>
+        {byLevel.filter(l=>risks.some(r=>r.level===l)).map(level=>{
+          const c=RC[level], bg=RBG[level];
+          return (
+            <div key={level} style={{ marginBottom:18 }}>
+              <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:8 }}>
+                <span style={{ padding:"3px 10px", borderRadius:6, fontSize:10, fontWeight:800, background:bg, color:c, border:`1px solid ${c}33` }}>{level}</span>
+                <span style={{ color:D.faint, fontSize:11 }}>{risks.filter(r=>r.level===level).length} risque{risks.filter(r=>r.level===level).length>1?"s":""}</span>
+              </div>
+              {risks.filter(r=>r.level===level).map((r,i)=>{
+                const key=`${level}-${i}`, isEx=exp===key;
+                return (
+                  <div key={i} onClick={()=>setExp(isEx?null:key)}
+                    style={{ border:`1px solid ${isEx?c+"44":D.border}`, borderRadius:10, marginBottom:6, overflow:"hidden", background:isEx?bg:"transparent", cursor:"pointer", transition:"all 0.15s" }}>
+                    <div style={{ display:"flex", alignItems:"center", gap:10, padding:"11px 14px" }}>
+                      <div style={{ width:3, height:18, borderRadius:2, background:c, flexShrink:0 }} />
+                      <div style={{ flex:1, fontWeight:600, fontSize:13, color:D.text }}>{r.title}</div>
+                      {r.question_ids && <span style={{ color:D.faint, fontSize:10, fontFamily:"monospace", flexShrink:0 }}>{r.question_ids}</span>}
+                      <span style={{ color:D.faint, fontSize:10, transform:isEx?"rotate(180deg)":"none", display:"inline-block", transition:"transform 0.2s" }}>▾</span>
+                    </div>
+                    {isEx && (
+                      <div style={{ padding:"0 14px 14px 27px", borderTop:`1px solid ${c}22` }}>
+                        {r.description && <div style={{ marginTop:10, marginBottom:10 }}>
+                          <div style={{ fontSize:9, fontWeight:700, color:D.faint, letterSpacing:"0.08em", marginBottom:4 }}>DESCRIPTION</div>
+                          <p style={{ fontSize:12, color:D.muted, lineHeight:1.7, margin:0 }}>{r.description}</p>
+                        </div>}
+                        {r.recommendation && <div style={{ background:"rgba(122,150,212,0.08)", borderRadius:8, padding:"10px 12px", border:"1px solid rgba(122,150,212,0.2)" }}>
+                          <div style={{ fontSize:9, fontWeight:700, color:"#7A96D4", letterSpacing:"0.08em", marginBottom:4 }}>RECOMMANDATION</div>
+                          <p style={{ fontSize:12, color:"#7A96D4", lineHeight:1.7, margin:0 }}>{r.recommendation}</p>
+                        </div>}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          );
+        })}
+      </div>
+    );
+  }
+
+  function ShowstoppersTab() {
+    if (!showstoppers.length && !result.showstoppers?.length) return <div style={{ padding:32, textAlign:"center", color:D.faint }}>Aucun showstopper</div>;
+    return (
+      <div>
+        <div style={{ display:"flex", alignItems:"flex-start", gap:12, padding:"14px 16px", borderRadius:12, marginBottom:18, background:"rgba(248,113,113,0.08)", border:"1px solid rgba(248,113,113,0.2)" }}>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#F87171" strokeWidth="2" strokeLinecap="round" style={{flexShrink:0,marginTop:1}}><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>
+          <div>
+            <div style={{ fontWeight:700, fontSize:13, color:"#F87171", marginBottom:3 }}>{showstoppers.length} problème{showstoppers.length>1?"s":""} bloquant{showstoppers.length>1?"s":""}</div>
+            <div style={{ fontSize:12, color:D.muted, lineHeight:1.5 }}>Ces points doivent être résolus avant toute approbation.</div>
+          </div>
+        </div>
+        {showstoppers.map(q => {
+          const c = { 4:"#34D399", 3:"#FBBF24", 2:"#F97316", 1:"#F87171" }[q.score]||D.faint;
+          return (
+            <div key={q.question_id} style={{ border:"1px solid rgba(248,113,113,0.2)", borderRadius:12, marginBottom:12, overflow:"hidden" }}>
+              <div style={{ display:"flex", alignItems:"center", gap:10, padding:"11px 14px", background:"rgba(248,113,113,0.06)", borderBottom:"1px solid rgba(248,113,113,0.15)" }}>
+                <span style={{ background:`rgba(${c==="#34D399"?"52,211,153":c==="#FBBF24"?"251,191,36":c==="#F97316"?"249,115,22":"248,113,113"},0.12)`, color:c, fontSize:9, fontWeight:800, padding:"2px 6px", borderRadius:4, fontFamily:"monospace", border:`1px solid ${c}22`, flexShrink:0 }}>{q.question_id}</span>
+                <div style={{ flex:1, fontWeight:600, fontSize:12, color:D.text }}>{q.question}</div>
+                <span style={{ fontSize:10, fontWeight:700, color:c, background:`rgba(${c==="#34D399"?"52,211,153":c==="#FBBF24"?"251,191,36":c==="#F97316"?"249,115,22":"248,113,113"},0.1)`, padding:"2px 7px", borderRadius:6 }}>{q.score}/4</span>
+              </div>
+              <div style={{ padding:"12px 14px" }}>
+                {q.response && <div style={{ marginBottom:8 }}>
+                  <div style={{ fontSize:9, fontWeight:700, color:D.faint, letterSpacing:"0.08em", marginBottom:3 }}>RÉPONSE FOURNISSEUR</div>
+                  <p style={{ fontSize:12, color:D.muted, lineHeight:1.6, margin:0 }}>{q.response}</p>
+                </div>}
+                {q.justification && <div style={{ marginBottom:8 }}>
+                  <div style={{ fontSize:9, fontWeight:700, color:D.faint, letterSpacing:"0.08em", marginBottom:3 }}>JUSTIFICATION</div>
+                  <p style={{ fontSize:12, color:D.muted, lineHeight:1.6, margin:0 }}>{q.justification}</p>
+                </div>}
+                {q.flag_reason && <div style={{ background:"rgba(248,113,113,0.08)", borderRadius:7, padding:"7px 10px", border:"1px solid rgba(248,113,113,0.2)", marginBottom:8 }}>
+                  <div style={{ fontSize:9, fontWeight:700, color:"#F87171", letterSpacing:"0.08em", marginBottom:2 }}>RAISON DU BLOCAGE</div>
+                  <p style={{ fontSize:12, color:"#F87171", margin:0 }}>{q.flag_reason}</p>
+                </div>}
+                {q.follow_up_question && <div style={{ background:"rgba(122,150,212,0.08)", borderRadius:7, padding:"7px 10px", border:"1px solid rgba(122,150,212,0.2)" }}>
+                  <div style={{ fontSize:9, fontWeight:700, color:"#7A96D4", letterSpacing:"0.08em", marginBottom:2 }}>QUESTION DE SUIVI</div>
+                  <p style={{ fontSize:12, color:"#7A96D4", margin:0 }}>❓ {q.follow_up_question}</p>
+                </div>}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    );
+  }
+
+  // ── Timeline inline ────────────────────────────────────────────────────────
+  const steps = (() => {
+    if (ticket.workflow_steps) return ticket.workflow_steps;
+    const order = ["extract_text","analyze_risks","score_responses","generate_text_report","export_excel"];
+    const doneCount = { running:1, waiting_validation:3, completed:5, rejected:3, error:1 }[ticket.status] ?? 0;
+    return order.map((key,i) => ({ key, status: i<doneCount?"done":i===doneCount&&["running","error"].includes(ticket.status)?(ticket.status==="error"?"error":"running"):"pending" }));
+  })();
+
+  return (
+    <div style={{ position:"fixed", inset:0, background:D.overlay, display:"flex", alignItems:"center", justifyContent:"center", zIndex:1000, backdropFilter:"blur(4px)" }}>
+      <div style={{ background:D.bg, borderRadius:20, width:"min(900px,96vw)", maxHeight:"92vh", display:"flex", flexDirection:"column",
+        boxShadow: dark ? "0 32px 80px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,255,255,0.06)" : "0 32px 80px rgba(18,33,75,0.2), 0 0 0 1px #e2e8f0",
+        border:`1px solid ${D.border}` }}>
+
+        {/* ── HEADER ── */}
+        <div style={{ padding:"22px 26px 0", flexShrink:0 }}>
+          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:14 }}>
+            <div>
+              <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:4 }}>
+                <h2 style={{ fontSize:20, fontWeight:800, color:D.text, letterSpacing:"-0.02em", margin:0 }}>{ticket.vendor}</h2>
                 <StatusBadge status={ticket.status} />
                 {(ticket.status==="completed"||ticket.status==="rejected") && (
-                  <span style={{
-                    display:"inline-flex", alignItems:"center", gap:4,
-                    padding:"2px 8px", borderRadius:10, fontSize:11, fontWeight:600,
-                    background: ticket.validated_by && ticket.validated_by !== "auto" ? "#EEF1F8" : "#F0FDF4",
-                    color:       ticket.validated_by && ticket.validated_by !== "auto" ? "#0E1A3A"  : "#16A34A",
-                    border:      ticket.validated_by && ticket.validated_by !== "auto" ? "1px solid #B8C3DE" : "1px solid #BBF7D0",
-                  }}>
-                    {ticket.validated_by && ticket.validated_by !== "auto"
-                      ? <>👤 Approuvé par {ticket.validated_by}</>
-                      : <>🤖 Approuvé par l'IA</>}
+                  <span style={{ display:"inline-flex", alignItems:"center", gap:5, padding:"3px 9px", borderRadius:20, fontSize:10, fontWeight:700,
+                    background: byHuman?"rgba(122,150,212,0.12)":"rgba(52,211,153,0.1)",
+                    color: byHuman?"#7A96D4":"#34D399",
+                    border: byHuman?"1px solid rgba(122,150,212,0.25)":"1px solid rgba(52,211,153,0.2)" }}>
+                    {byHuman
+                      ? <><svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg> Approuvé par {ticket.validated_by}</>
+                      : <><svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg> Approuvé par l'IA</>}
                   </span>
                 )}
+              </div>
+              <div style={{ display:"flex", gap:6, alignItems:"center", color:D.faint, fontSize:12 }}>
+                {ticket.project && <span>{ticket.project}</span>}
+                {ticket.analyst && <><span>·</span><span>{ticket.analyst}</span></>}
+                {ticket.created_at && <><span>·</span><span>{fmtDate(ticket.created_at)}</span></>}
               </div>
             </div>
             <div style={{ display:"flex", gap:8, alignItems:"center", flexShrink:0 }}>
               {ticket.status==="completed" && (
                 <button onClick={()=>window.open(`${API}/tickets/${ticket.id}/download`,"_blank")}
-                  style={{ padding:"6px 14px", borderRadius:7, background:"#ECFDF5", border:"1px solid #A7F3D0", color:"#059669", cursor:"pointer", fontSize:12, fontWeight:600 }}><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{marginRight:4,verticalAlign:"middle"}}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>Excel</button>
+                  style={{ display:"inline-flex", alignItems:"center", gap:6, padding:"7px 14px", borderRadius:9, background:"rgba(52,211,153,0.1)", border:"1px solid rgba(52,211,153,0.25)", color:"#34D399", cursor:"pointer", fontSize:12, fontWeight:600 }}>
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                  Excel
+                </button>
               )}
-              <button onClick={onClose} style={{ background:"none", border:"none", color:"#9CA3AF", fontSize:18, cursor:"pointer" }}>✕</button>
+              <button onClick={onClose} style={{ width:32, height:32, borderRadius:8, display:"flex", alignItems:"center", justifyContent:"center", background:D.surface, border:`1px solid ${D.border}`, color:D.faint, cursor:"pointer" }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              </button>
             </div>
           </div>
 
-          <WorkflowTimeline ticket={ticket} />
+          {/* Workflow timeline */}
+          <div style={{ background:D.surface, border:`1px solid ${D.border}`, borderRadius:10, padding:"10px 14px", marginBottom:16, overflowX:"auto" }}>
+            <div style={{ fontSize:9, fontWeight:700, color:D.faint, letterSpacing:"0.1em", marginBottom:10 }}>PROGRESSION DU WORKFLOW</div>
+            <div style={{ display:"flex", alignItems:"center", minWidth:"max-content" }}>
+              {steps.map((step,i) => {
+                const isDone=step.status==="done", isRun=step.status==="running", isErr=step.status==="error";
+                const c = isDone?"#34D399":isRun?"#7A96D4":isErr?"#F87171":D.faint;
+                const bg= isDone?"rgba(52,211,153,0.08)":isRun?"rgba(122,150,212,0.08)":isErr?"rgba(248,113,113,0.08)":D.surface;
+                const bd= isDone?"rgba(52,211,153,0.2)":isRun?"rgba(122,150,212,0.2)":isErr?"rgba(248,113,113,0.2)":D.border;
+                return (
+                  <div key={step.key} style={{ display:"flex", alignItems:"center" }}>
+                    <div style={{ display:"flex", alignItems:"center", gap:6, padding:"4px 10px", borderRadius:7, background:bg, border:`1px solid ${bd}`, color:c }}>
+                      <span style={{ width:5, height:5, borderRadius:"50%", background:c, animation:isRun?"blink 1.4s infinite":"none", boxShadow:isRun?`0 0 6px ${c}`:"none" }} />
+                      <span style={{ fontSize:10, fontWeight:700, fontFamily:"monospace", whiteSpace:"nowrap" }}>{step.key}</span>
+                      {isDone && <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="3" strokeLinecap="round"><polyline points="20 6 9 17 4 12"/></svg>}
+                      {isErr  && <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="3" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>}
+                    </div>
+                    {i<steps.length-1 && <div style={{ width:18, height:1, background:isDone?"rgba(52,211,153,0.3)":D.border, margin:"0 0" }}>
+                      <span style={{ float:"right", color:isDone?"rgba(52,211,153,0.5)":D.faint, fontSize:9, lineHeight:"8px", marginTop:-4 }}>›</span>
+                    </div>}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
 
+          {/* Tabs */}
           {hasResult && (
-            <div style={{ display:"flex", gap:0, borderBottom:"1px solid #E5E7EB" }}>
-              {tabs.map(t=>(
+            <div style={{ display:"flex", gap:0, borderBottom:`1px solid ${D.border}` }}>
+              {tabs.map(t => (
                 <button key={t.key} onClick={()=>setTab(t.key)}
-                  style={{ padding:"9px 16px", background:"none", border:"none", cursor:"pointer", fontSize:12, fontWeight:tab===t.key?600:400, color:tab===t.key?"#12214B":"#6B7280", borderBottom:tab===t.key?"2px solid #12214B":"2px solid transparent", whiteSpace:"nowrap", transition:"all 0.12s" }}>
-                  {t.key==="showstoppers" ? <span style={{ color:tab===t.key?"#E30613":"#E8404C" }}>{t.label}</span> : t.label}
+                  style={{ padding:"10px 16px", background:"none", border:"none", cursor:"pointer", fontSize:12, fontWeight:tab===t.key?700:400,
+                    color: tab===t.key ? (t.red?"#F87171":"#fff") : D.muted,
+                    borderBottom: tab===t.key ? `2px solid ${t.red?"#F87171":"#E30613"}` : "2px solid transparent",
+                    whiteSpace:"nowrap", transition:"all 0.12s" }}>
+                  {t.label}
                 </button>
               ))}
             </div>
           )}
         </div>
 
-        {/* Scrollable content */}
-        <div style={{ flex:1, overflowY:"auto", padding:"20px 28px" }}>
+        {/* ── CONTENT ── */}
+        <div style={{ flex:1, overflowY:"auto", padding:"20px 26px" }}>
           {fetching ? (
             <div style={{ padding:"48px 0", textAlign:"center" }}>
-              <div style={{ display:"inline-flex", alignItems:"center", gap:10, color:"#6B7280", fontSize:13 }}>
-                <span style={{ width:8, height:8, borderRadius:"50%", background:"#3A5FBF", display:"inline-block", animation:"blink 1.4s infinite" }} />
+              <div style={{ display:"inline-flex", alignItems:"center", gap:10, color:D.muted, fontSize:13 }}>
+                <span style={{ width:8, height:8, borderRadius:"50%", background:"#E30613", display:"inline-block", animation:"blink 1.4s infinite" }} />
                 Chargement du rapport…
               </div>
             </div>
           ) : !hasResult ? (
-            <div style={{ padding:"32px 0", textAlign:"center", color:"#9CA3AF", fontSize:13 }}>
+            <div style={{ padding:"32px 0", textAlign:"center", color:D.faint, fontSize:13 }}>
               {ticket.status==="running" ? "Analyse en cours…" : ticket.status==="error" ? "Le workflow a rencontré une erreur." : "Aucun résultat disponible."}
             </div>
           ) : (
             <>
-              {tab==="overview"     && <TabOverview result={result} onTabChange={setTab} />}
-              {tab==="questions"    && result.question_scores?.length>0 && <TabQuestions questions={result.question_scores} />}
-              {tab==="risks"        && <TabRisks risks={result.risks} />}
-              {tab==="showstoppers" && <TabShowstoppers result={result} />}
+              {tab==="overview"     && <OverviewTab />}
+              {tab==="questions"    && <QuestionsTab />}
+              {tab==="risks"        && <RisksTab />}
+              {tab==="showstoppers" && <ShowstoppersTab />}
             </>
           )}
         </div>
 
-        {/* Fixed footer */}
-        {(isValidation || !isValidation) && (
-          <div style={{ padding:"16px 28px", borderTop:"1px solid #E5E7EB", background:"#F9FAFB", borderRadius:"0 0 16px 16px", flexShrink:0 }}>
-            {isValidation ? (
-              <>
-                <textarea value={comments} onChange={e=>setComments(e.target.value)} rows={2} placeholder="Commentaires (optionnel)…"
-                  style={{ width:"100%", padding:"8px 12px", borderRadius:8, background:"#fff", border:"1px solid #E5E7EB", color:"#0F172A", fontSize:12, outline:"none", resize:"none", boxSizing:"border-box", marginBottom:10 }} />
-                <div style={{ display:"flex", gap:8 }}>
-                  <button onClick={()=>send(false)} disabled={loading} style={{ flex:1, padding:"10px 0", borderRadius:8, background:"#FFF0F0", border:"1px solid #FFBCBF", color:"#E30613", cursor:"pointer", fontSize:13, fontWeight:600 }}>Rejeter</button>
-                  <button onClick={()=>send(true)}  disabled={loading} style={{ flex:2, padding:"10px 0", borderRadius:8, background:"#12214B", border:"none", color:"#fff", cursor:"pointer", fontSize:13, fontWeight:600 }}>Approuver & Générer Excel</button>
-                </div>
-              </>
-            ) : (
-              <div style={{ display:"flex", justifyContent:"flex-end" }}>
-                <button onClick={onClose} style={{ padding:"9px 24px", borderRadius:8, background:"#EEF1F8", border:"1px solid #B8C3DE", color:"#12214B", cursor:"pointer", fontSize:13, fontWeight:500 }}>Fermer</button>
+        {/* ── FOOTER ── */}
+        <div style={{ padding:"14px 26px", borderTop:`1px solid ${D.border}`, background:D.footerBg, borderRadius:"0 0 20px 20px", flexShrink:0 }}>
+          {isValidation ? (
+            <>
+              <textarea value={comments} onChange={e=>setComments(e.target.value)} rows={2} placeholder="Commentaires (optionnel)…"
+                style={{ width:"100%", padding:"8px 12px", borderRadius:8, background:D.inputBg, border:`1px solid ${D.border}`, color:D.text, fontSize:12, outline:"none", resize:"none", boxSizing:"border-box", marginBottom:10 }} />
+              <div style={{ display:"flex", gap:8 }}>
+                <button onClick={()=>send(false)} disabled={loading}
+                  style={{ flex:1, padding:"10px", borderRadius:10, background:"rgba(227,6,19,0.1)", border:"1px solid rgba(227,6,19,0.3)", color:"#F87171", cursor:"pointer", fontSize:13, fontWeight:700 }}>Rejeter</button>
+                <button onClick={()=>send(true)} disabled={loading}
+                  style={{ flex:2, padding:"10px", borderRadius:10, background:"#E30613", border:"none", color:"#fff", cursor:loading?"wait":"pointer", fontSize:13, fontWeight:700 }}>
+                  {loading?"Envoi…":"Approuver & Générer Excel"}
+                </button>
               </div>
-            )}
-          </div>
-        )}
+            </>
+          ) : (
+            <div style={{ display:"flex", justifyContent:"flex-end" }}>
+              <button onClick={onClose}
+                style={{ padding:"9px 24px", borderRadius:10, background:D.surface, border:`1px solid ${D.border}`, color:D.muted, cursor:"pointer", fontSize:13, fontWeight:500 }}>Fermer</button>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
 }
 
-function TicketRow({ ticket, onSelect, adminMode: isAdmin, checked, onCheck }) {
+function TicketRow({ ticket, onSelect, adminMode: isAdmin, checked, onCheck, dark=true, T={text:"#fff",textMuted:"rgba(255,255,255,0.55)",textFaint:"rgba(255,255,255,0.3)",tableBorder:"rgba(255,255,255,0.05)",rowChecked:"rgba(227,6,19,0.08)",badgeBg:"rgba(255,255,255,0.05)",badgeBorder:"rgba(255,255,255,0.1)",badgeText:"rgba(255,255,255,0.65)"} }) {
   const activeStep = ticket.workflow_steps?.find(s => s.status === "running")?.key;
   const decision   = ticket.final_decision || ticket.result?.final_decision;
   const isApproved = decision === "Approved";
@@ -1328,9 +1703,11 @@ function TicketRow({ ticket, onSelect, adminMode: isAdmin, checked, onCheck }) {
   const isDone     = ticket.status === "completed" || ticket.status === "rejected";
 
   return (
-    <tr onClick={() => isAdmin ? null : onSelect(ticket)} className={isAdmin ? "" : "row-hover"}
-      style={{ cursor:isAdmin?"default":"pointer", borderBottom:"1px solid rgba(255,255,255,0.05)",
-        background:checked?"rgba(227,6,19,0.08)":"transparent", transition:"background 0.12s" }}>
+    <tr onClick={() => isAdmin ? null : onSelect(ticket)}
+      style={{ cursor:isAdmin?"default":"pointer", borderBottom:`1px solid ${T.tableBorder}`,
+        background:checked?T.rowChecked:"transparent", transition:"background 0.12s" }}
+      onMouseEnter={e=>{ if(!isAdmin&&!checked) e.currentTarget.style.background=T.rowHover; }}
+      onMouseLeave={e=>{ e.currentTarget.style.background=checked?T.rowChecked:"transparent"; }}>
 
       {/* Checkbox */}
       {isAdmin && (
@@ -1341,21 +1718,21 @@ function TicketRow({ ticket, onSelect, adminMode: isAdmin, checked, onCheck }) {
 
       {/* Fournisseur / Projet */}
       <td style={{ padding:"14px 18px" }}>
-        <div style={{ color:"#fff", fontWeight:600, fontSize:13, letterSpacing:"-0.01em" }}>{ticket.vendor}</div>
-        {ticket.project && <div style={{ color:"rgba(255,255,255,0.4)", fontSize:11, marginTop:3, fontStyle:"italic" }}>{ticket.project}</div>}
+        <div style={{ color:T.text, fontWeight:600, fontSize:13, letterSpacing:"-0.01em" }}>{ticket.vendor}</div>
+        {ticket.project && <div style={{ color:T.textFaint, fontSize:11, marginTop:3, fontStyle:"italic" }}>{ticket.project}</div>}
       </td>
 
       {/* Analyste / Approuvé par */}
       <td style={{ padding:"14px 18px" }}>
         <div style={{ display:"flex", alignItems:"center", gap:7 }}>
           {/* Avatar initial */}
-          <div style={{ width:26, height:26, borderRadius:"50%", background:"rgba(58,95,191,0.25)", border:"1px solid rgba(58,95,191,0.35)", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+          <div style={{ width:26, height:26, borderRadius:"50%", background: dark ? "rgba(58,95,191,0.25)" : "#eef1f8", border: dark ? "1px solid rgba(58,95,191,0.35)" : "1px solid #b8c3de", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
             <span style={{ color:"#7A96D4", fontSize:10, fontWeight:700 }}>
               {(ticket.analyst||"?")[0].toUpperCase()}
             </span>
           </div>
           <div>
-            <div style={{ color:"rgba(255,255,255,0.8)", fontSize:12, fontWeight:500 }}>{ticket.analyst||"—"}</div>
+            <div style={{ color:T.textMuted, fontSize:12, fontWeight:500 }}>{ticket.analyst||"—"}</div>
             {isDone && (
               <div style={{ display:"inline-flex", alignItems:"center", gap:4, marginTop:3,
                 padding:"2px 7px", borderRadius:20, fontSize:10, fontWeight:600,
@@ -1407,10 +1784,10 @@ function TicketRow({ ticket, onSelect, adminMode: isAdmin, checked, onCheck }) {
 
       {/* Date */}
       <td style={{ padding:"14px 18px" }}>
-        <div style={{ color:"rgba(255,255,255,0.55)", fontSize:12 }}>
+        <div style={{ color:T.textMuted, fontSize:12 }}>
           {fmtDate(ticket.created_at).split(",")[0]}
         </div>
-        <div style={{ color:"rgba(255,255,255,0.25)", fontSize:11, marginTop:2 }}>
+        <div style={{ color:T.textFaint, fontSize:11, marginTop:2 }}>
           {fmtDate(ticket.created_at).split(",")[1]?.trim()}
         </div>
       </td>
@@ -1438,8 +1815,8 @@ function TicketRow({ ticket, onSelect, adminMode: isAdmin, checked, onCheck }) {
           )}
           <button onClick={e => { e.stopPropagation(); onSelect(ticket); }}
             style={{ display:"inline-flex", alignItems:"center", gap:5, padding:"5px 11px", borderRadius:7,
-              background:"rgba(255,255,255,0.05)", border:"1px solid rgba(255,255,255,0.1)",
-              color:"rgba(255,255,255,0.65)", cursor:"pointer", fontSize:11, fontWeight:500 }}>
+              background:T.badgeBg, border:`1px solid ${T.badgeBorder}`,
+              color:T.badgeText, cursor:"pointer", fontSize:11, fontWeight:500 }}>
             <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg>
             Détails
           </button>
@@ -1504,6 +1881,62 @@ function DashboardApp({ currentUser, onLogout }) {
   const [checkedIds, setCheckedIds]       = useState(new Set());
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting]           = useState(false);
+  const [dark, setDark]                   = useState(true);
+
+  // Theme tokens
+  const T = dark ? {
+    bg:           'linear-gradient(160deg,#07101f 0%,#0d1e3a 50%,#091630 100%)',
+    surface:      'rgba(255,255,255,0.04)',
+    surfaceMid:   'rgba(255,255,255,0.07)',
+    border:       'rgba(255,255,255,0.08)',
+    borderMid:    'rgba(255,255,255,0.14)',
+    headerBg:     'rgba(7,14,32,0.85)',
+    headerBorder: 'rgba(58,95,191,0.25)',
+    text:         '#ffffff',
+    textMuted:    'rgba(255,255,255,0.55)',
+    textFaint:    'rgba(255,255,255,0.3)',
+    tableBorder:  'rgba(255,255,255,0.05)',
+    rowHover:     'rgba(58,95,191,0.08)',
+    rowChecked:   'rgba(227,6,19,0.08)',
+    filterBg:     'rgba(255,255,255,0.04)',
+    filterActive: '#E30613',
+    filterText:   'rgba(255,255,255,0.55)',
+    inputBg:      'rgba(255,255,255,0.05)',
+    inputBorder:  'rgba(255,255,255,0.1)',
+    inputText:    '#ffffff',
+    badgeBg:      'rgba(255,255,255,0.05)',
+    badgeBorder:  'rgba(255,255,255,0.1)',
+    badgeText:    'rgba(255,255,255,0.65)',
+    thText:       'rgba(255,255,255,0.45)',
+    scrollThumb:  '#1e3a6e',
+    scrollTrack:  '#0a1428',
+  } : {
+    bg:           'linear-gradient(160deg,#f0f4f8 0%,#e8eef6 50%,#f0f4f8 100%)',
+    surface:      '#ffffff',
+    surfaceMid:   '#f8fafc',
+    border:       '#e2e8f0',
+    borderMid:    '#cbd5e1',
+    headerBg:     'rgba(255,255,255,0.92)',
+    headerBorder: 'rgba(18,33,75,0.15)',
+    text:         '#0f172a',
+    textMuted:    '#475569',
+    textFaint:    '#94a3b8',
+    tableBorder:  '#f1f5f9',
+    rowHover:     '#f8fafc',
+    rowChecked:   '#fff0f0',
+    filterBg:     '#ffffff',
+    filterActive: '#E30613',
+    filterText:   '#64748b',
+    inputBg:      '#ffffff',
+    inputBorder:  '#e2e8f0',
+    inputText:    '#0f172a',
+    badgeBg:      '#f1f5f9',
+    badgeBorder:  '#e2e8f0',
+    badgeText:    '#475569',
+    thText:       '#94a3b8',
+    scrollThumb:  '#cbd5e1',
+    scrollTrack:  '#f1f5f9',
+  };
 
   const fetchTickets = useCallback(async () => {
     try {
@@ -1559,160 +1992,235 @@ function DashboardApp({ currentUser, onLogout }) {
   const someChecked = checkedIds.size > 0;
 
   return (
-    <div style={{ minHeight:"100vh", background:"linear-gradient(160deg,#07101f 0%,#0d1e3a 50%,#091630 100%)", color:"#E2E8F0", fontFamily:"'DM Sans','Segoe UI',sans-serif" }}>
-      <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=DM+Mono:wght@400;500&display=swap');
-        * { box-sizing:border-box; margin:0; padding:0; }
-        ::-webkit-scrollbar { width:4px; height:4px; }
-        ::-webkit-scrollbar-track { background:#0a1428; }
-        ::-webkit-scrollbar-thumb { background:#1e3a6e; border-radius:2px; }
-        @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.3} }
-        @keyframes fadeUp { from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:none} }
-        @keyframes shimmer { 0%{background-position:-200% 0} 100%{background-position:200% 0} }
-        tbody tr { animation:fadeUp 0.18s ease; }
-        input[type=checkbox] { width:14px;height:14px;cursor:pointer;accent-color:#E30613; }
-        .row-hover:hover { background:rgba(58,95,191,0.08) !important; }
-        .filter-btn:hover { background:rgba(255,255,255,0.06) !important; }
-        .action-btn:hover { opacity:0.85; }
-      `}</style>
+    <div style={{ minHeight:"100vh", background:T.bg, color:T.text, fontFamily:"'DM Sans','Segoe UI',sans-serif", transition:"background 0.3s, color 0.3s" }}>
+      <style>{[
+        `@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=DM+Mono:wght@400;500&display=swap');`,
+        `* { box-sizing:border-box; margin:0; padding:0; }`,
+        `::-webkit-scrollbar { width:4px; height:4px; }`,
+        `::-webkit-scrollbar-track { background:${T.scrollTrack}; }`,
+        `::-webkit-scrollbar-thumb { background:${T.scrollThumb}; border-radius:2px; }`,
+        `@keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.3} }`,
+        `@keyframes fadeUp { from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:none} }`,
+        `@keyframes kpiIn { from{opacity:0;transform:translateY(12px)} to{opacity:1;transform:none} }`,
+        `tbody tr { animation:fadeUp 0.18s ease; }`,
+        `input[type=checkbox] { width:14px;height:14px;cursor:pointer;accent-color:#E30613; }`,
+        `.kpi-card:nth-child(1){animation:kpiIn 0.4s ease both}.kpi-card:nth-child(2){animation:kpiIn 0.5s ease both}.kpi-card:nth-child(3){animation:kpiIn 0.6s ease both}.kpi-card:nth-child(4){animation:kpiIn 0.7s ease both}.kpi-card:nth-child(5){animation:kpiIn 0.8s ease both}`,
+        `.filter-tab:hover{background:rgba(255,255,255,0.08)!important;color:rgba(255,255,255,0.8)!important}`,
+        `.trow:hover td{background:${dark?'rgba(58,95,191,0.06)':'rgba(18,33,75,0.03)'}!important}`,
+        `.action-btn:hover{opacity:0.85}`,
+        `.ticket-action:hover{opacity:1!important;transform:translateY(-1px)}`,
+      ].join('\n')}</style>
 
-      {/* ── Header ── */}
-      <header style={{ background:"rgba(7,14,32,0.85)", backdropFilter:"blur(12px)", borderBottom:"1px solid rgba(58,95,191,0.25)", padding:"0 32px", height:60, display:"flex", alignItems:"center", justifyContent:"space-between", position:"sticky", top:0, zIndex:100 }}>
-        <div style={{ display:"flex", alignItems:"center", gap:14 }}>
-          <img src={CMA_CGM_LOGO} alt="CMA CGM" style={{ height:32, objectFit:"contain", filter:"brightness(0) invert(1)" }} />
-          <div style={{ width:1, height:22, background:"rgba(255,255,255,0.12)" }} />
+      {/* ── HEADER ── */}
+      <header style={{ background:T.headerBg, backdropFilter:"blur(16px)", borderBottom:`1px solid ${T.headerBorder}`, padding:"0 36px", height:64, display:"flex", alignItems:"center", justifyContent:"space-between", position:"sticky", top:0, zIndex:200 }}>
+        <div style={{ display:"flex", alignItems:"center", gap:16 }}>
+          <img src={CMA_CGM_LOGO} alt="CMA CGM" style={{ height:34, objectFit:"contain", filter: dark ? "brightness(0) invert(1)" : "none" }} />
+          <div style={{ width:1, height:24, background: dark ? "rgba(255,255,255,0.1)" : "rgba(18,33,75,0.12)" }} />
           <div>
-            <div style={{ fontWeight:700, fontSize:14, color:"#fff", letterSpacing:"-0.01em" }}>TPRA Platform</div>
-            <div style={{ color:"rgba(255,255,255,0.5)", fontSize:10, letterSpacing:"0.08em" }}>THIRD PARTY RISK ASSESSMENT</div>
+            <div style={{ fontWeight:700, fontSize:15, color:T.text, letterSpacing:"-0.02em" }}>TPRA Platform</div>
+            <div style={{ color:T.textFaint, fontSize:10, letterSpacing:"0.1em", fontWeight:500 }}>THIRD PARTY RISK ASSESSMENT</div>
           </div>
         </div>
         <div style={{ display:"flex", gap:8, alignItems:"center" }}>
-          {/* User pill */}
-          <div style={{ display:"flex", alignItems:"center", gap:8, padding:"5px 14px 5px 10px", borderRadius:24, background:"rgba(255,255,255,0.06)", border:"1px solid rgba(255,255,255,0.1)" }}>
-            <div style={{ width:28, height:28, borderRadius:"50%", background: isAdmin ? "linear-gradient(135deg,#E30613,#a00000)" : "linear-gradient(135deg,#3A5FBF,#12214B)", display:"flex", alignItems:"center", justifyContent:"center", fontSize:13 }}>
+          {/* User badge */}
+          <div style={{ display:"flex", alignItems:"center", gap:8, padding:"6px 14px 6px 8px", borderRadius:28, background:T.surface, border:`1px solid ${T.border}` }}>
+            <div style={{ width:30, height:30, borderRadius:"50%", background: isAdmin ? "linear-gradient(135deg,#E30613,#8b0000)" : "linear-gradient(135deg,#3A5FBF,#12214B)", display:"flex", alignItems:"center", justifyContent:"center" }}>
               {isAdmin
-              ? <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M4.93 4.93a10 10 0 0 0 0 14.14"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07M8.46 8.46a5 5 0 0 0 0 7.07"/></svg>
-              : <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>}
+                ? <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.2" strokeLinecap="round"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M4.93 4.93a10 10 0 0 0 0 14.14"/></svg>
+                : <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.2" strokeLinecap="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>}
             </div>
             <div>
-              <div style={{ fontSize:12, fontWeight:600, color:"#fff", lineHeight:1.2 }}>{currentUser.name}</div>
-              <div style={{ fontSize:9, color:"rgba(255,255,255,0.55)", letterSpacing:"0.08em" }}>{isAdmin ? "ADMIN" : "ANALYSTE CYBER"}</div>
+              <div style={{ fontSize:12, fontWeight:600, color:T.text }}>{currentUser.name}</div>
+              <div style={{ fontSize:9, color:T.textFaint, letterSpacing:"0.08em" }}>{isAdmin?"ADMIN":"ANALYSTE CYBER"}</div>
             </div>
           </div>
-          <button onClick={() => setLastRefresh(Date.now())} className="action-btn"
-            style={{ padding:"7px 14px", borderRadius:8, background:"rgba(255,255,255,0.06)", border:"1px solid rgba(255,255,255,0.1)", color:"rgba(255,255,255,0.85)", cursor:"pointer", fontSize:12, fontWeight:500 }}>
-            ↻
+          {/* Theme toggle */}
+          <button onClick={() => setDark(d=>!d)} className="action-btn"
+            style={{ width:36, height:36, borderRadius:10, display:"flex", alignItems:"center", justifyContent:"center", background:T.surface, border:`1px solid ${T.border}`, color:T.textMuted, cursor:"pointer" }}>
+            {dark
+              ? <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+              : <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>}
           </button>
-          <button onClick={() => setShowUpload(true)} className="action-btn"
-            style={{ padding:"7px 18px", borderRadius:8, background:"#E30613", border:"none", color:"#fff", cursor:"pointer", fontSize:12, fontWeight:700, letterSpacing:"0.02em" }}>
-            + Nouveau ticket
+          {/* Refresh */}
+          <button onClick={()=>setLastRefresh(Date.now())} className="action-btn"
+            style={{ width:36, height:36, borderRadius:10, display:"flex", alignItems:"center", justifyContent:"center", background:T.surface, border:`1px solid ${T.border}`, color:T.textMuted, cursor:"pointer" }}>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
           </button>
+          {/* New ticket */}
+          <button onClick={()=>setShowUpload(true)} className="action-btn"
+            style={{ padding:"8px 20px", borderRadius:10, background:"#E30613", border:"none", color:"#fff", cursor:"pointer", fontSize:13, fontWeight:700, letterSpacing:"0.01em", display:"flex", alignItems:"center", gap:6 }}>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            Nouveau ticket
+          </button>
+          {/* Logout */}
           <button onClick={onLogout} className="action-btn" title="Déconnexion"
-            style={{ padding:"7px 12px", borderRadius:8, background:"transparent", border:"1px solid rgba(255,255,255,0.1)", color:"rgba(255,255,255,0.6)", cursor:"pointer", fontSize:12 }}>
-            ⎋
+            style={{ width:36, height:36, borderRadius:10, display:"flex", alignItems:"center", justifyContent:"center", background:"transparent", border:`1px solid ${T.border}`, color:T.textFaint, cursor:"pointer" }}>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
           </button>
         </div>
       </header>
 
-      <div style={{ padding:"28px 32px" }}>
+      {/* ── MAIN ── */}
+      <div style={{ padding:"32px 36px", maxWidth:1400, margin:"0 auto" }}>
 
-        {/* ── KPI Cards ── */}
-        <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:14, marginBottom:28 }}>
+        {/* ── Page title + date ── */}
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-end", marginBottom:28 }}>
+          <div>
+            <div style={{ fontSize:11, color:T.textFaint, fontWeight:600, letterSpacing:"0.1em", marginBottom:4 }}>TABLEAU DE BORD</div>
+            <div style={{ fontSize:26, fontWeight:700, color:T.text, letterSpacing:"-0.02em" }}>
+              Bonjour, <span style={{ color:"#E30613" }}>{currentUser.name.split(" ")[0]}</span>
+            </div>
+          </div>
+          <div style={{ display:"flex", alignItems:"center", gap:8, padding:"8px 16px", borderRadius:10, background:T.surface, border:`1px solid ${T.border}`, color:T.textMuted, fontSize:12 }}>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+            {new Date().toLocaleDateString("fr-FR",{day:"2-digit",month:"long",year:"numeric"})}
+          </div>
+        </div>
+
+        {/* ── KPI CARDS ── Inspired by Gaia: large numbers, horizontal scroll if needed */}
+        <div style={{ display:"grid", gridTemplateColumns:"repeat(5,1fr)", gap:14, marginBottom:32 }}>
           {[
-            { label:"Total",     value:tickets.length,               color:"#7A96D4", glow:"rgba(58,95,191,0.35)",   rgb:"58,95,191",
-              icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></svg> },
-            { label:"En cours",  value:counts.running||0,            color:"#FBBF24", glow:"rgba(251,191,36,0.3)",   rgb:"251,191,36",
-              icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 15"/></svg> },
-            { label:"À valider", value:counts.waiting_validation||0, color:"#F97316", glow:"rgba(249,115,22,0.3)",   rgb:"249,115,22",
-              icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg> },
-            { label:"Terminés",  value:counts.completed||0,          color:"#34D399", glow:"rgba(52,211,153,0.3)",   rgb:"52,211,153",
-              icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg> },
-          ].map(({ label, value, icon, color, glow, rgb }) => (
-            <div key={label} style={{ background:"rgba(255,255,255,0.04)", border:"1px solid rgba(255,255,255,0.07)", borderRadius:14, padding:"18px 20px", position:"relative", overflow:"hidden", backdropFilter:"blur(8px)" }}>
-              <div style={{ position:"absolute", top:0, left:0, right:0, height:1.5, background:`linear-gradient(90deg,transparent,${color},transparent)`, opacity:0.7 }} />
-              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start" }}>
-                <div>
-                  <div style={{ color:"rgba(255,255,255,0.55)", fontSize:10, fontWeight:600, letterSpacing:"0.12em", marginBottom:10 }}>{label.toUpperCase()}</div>
-                  <div style={{ color:"#fff", fontSize:34, fontWeight:700, lineHeight:1, textShadow:`0 0 24px ${glow}` }}>{value}</div>
-                </div>
-                <div style={{ width:38, height:38, borderRadius:10, background:`rgba(${rgb},0.12)`, border:`1px solid rgba(${rgb},0.2)`, display:"flex", alignItems:"center", justifyContent:"center", color }}>
-                  {icon}
-                </div>
+            { label:"Tickets total",  value:tickets.length,               color:"#7A96D4", rgb:"58,95,191",   icon:<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></svg> },
+            { label:"En cours",       value:counts.running||0,            color:"#FBBF24", rgb:"251,191,36",  icon:<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 15"/></svg> },
+            { label:"À valider",      value:counts.waiting_validation||0, color:"#F97316", rgb:"249,115,22",  icon:<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg> },
+            { label:"Terminés",       value:counts.completed||0,          color:"#34D399", rgb:"52,211,153",  icon:<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"><polyline points="20 6 9 17 4 12"/></svg> },
+            { label:"Rejetés / Err.", value:(counts.rejected||0)+(counts.error||0), color:"#F87171", rgb:"248,113,113", icon:<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg> },
+          ].map(({ label, value, icon, color, rgb },i) => (
+            <div key={label} className="kpi-card" style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:16, padding:"20px 22px 18px", position:"relative", overflow:"hidden", cursor:"default",
+              boxShadow: dark ? `0 0 0 1px rgba(${rgb},0.08)` : "0 2px 16px rgba(18,33,75,0.07)" }}>
+              {/* top accent line */}
+              <div style={{ position:"absolute", top:0, left:0, right:0, height:3, background:`linear-gradient(90deg,rgba(${rgb},0),rgba(${rgb},0.8),rgba(${rgb},0))` }} />
+              {/* icon top right */}
+              <div style={{ position:"absolute", top:16, right:16, width:36, height:36, borderRadius:10, background:`rgba(${rgb},0.1)`, border:`1px solid rgba(${rgb},0.18)`, display:"flex", alignItems:"center", justifyContent:"center", color }}>{icon}</div>
+              {/* label */}
+              <div style={{ fontSize:10, fontWeight:700, letterSpacing:"0.1em", color:T.textFaint, marginBottom:12 }}>{label.toUpperCase()}</div>
+              {/* big number */}
+              <div style={{ fontSize:42, fontWeight:800, lineHeight:1, color: dark ? "#fff" : "#0f172a", letterSpacing:"-0.03em" }}>{value}</div>
+              {/* subtle bottom label */}
+              <div style={{ marginTop:10, fontSize:10, color:`rgba(${rgb},0.7)`, fontWeight:600 }}>
+                {value === 0 ? "Aucun" : value === 1 ? "1 ticket" : `${value} tickets`}
               </div>
             </div>
           ))}
         </div>
 
-        {/* ── Filters + Search ── */}
-        <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:16, gap:12, flexWrap:"wrap" }}>
-          <div style={{ display:"flex", gap:2, background:"rgba(255,255,255,0.04)", border:"1px solid rgba(255,255,255,0.08)", borderRadius:10, padding:3 }}>
-            {FILTERS.map(({ key, label, count }) => (
-              <button key={key} onClick={() => setFilter(key)} className="filter-btn"
-                style={{ padding:"5px 12px", borderRadius:7, cursor:"pointer", fontSize:12, fontWeight:filter===key?600:400, background:filter===key?"rgba(227,6,19,0.85)":"transparent", border:"none", color:filter===key?"#fff":"rgba(255,255,255,0.55)", transition:"all 0.15s" }}>
-                {label}
-                {count > 0 && <span style={{ marginLeft:5, padding:"0 5px", borderRadius:8, background:"rgba(255,255,255,0.12)", fontSize:10, color:filter===key?"rgba(255,255,255,0.9)":"rgba(255,255,255,0.4)" }}>{count}</span>}
-              </button>
-            ))}
+        {/* ── TICKETS EN ATTENTE DE VALIDATION — mini section ── */}
+        {(counts.waiting_validation||0) > 0 && (
+          <div style={{ marginBottom:28 }}>
+            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:14 }}>
+              <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+                <div style={{ width:4, height:20, borderRadius:2, background:"#F97316" }} />
+                <span style={{ fontSize:15, fontWeight:700, color:T.text }}>À valider</span>
+                <span style={{ padding:"2px 8px", borderRadius:20, background:"rgba(249,115,22,0.15)", color:"#F97316", fontSize:11, fontWeight:700 }}>{counts.waiting_validation}</span>
+              </div>
+              <button onClick={()=>setFilter("waiting_validation")} style={{ background:"none", border:"none", color:"#F97316", fontSize:12, fontWeight:600, cursor:"pointer" }}>Voir tout →</button>
+            </div>
+            <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(300px,1fr))", gap:10 }}>
+              {tickets.filter(t=>t.status==="waiting_validation").slice(0,3).map(t=>(
+                <div key={t.id} onClick={()=>setSelected(t)}
+                  style={{ background:T.surface, border:"1px solid rgba(249,115,22,0.25)", borderRadius:12, padding:"14px 16px", cursor:"pointer", transition:"all 0.15s",
+                    boxShadow: dark?"0 0 0 1px rgba(249,115,22,0.08)":"0 2px 8px rgba(249,115,22,0.08)" }}>
+                  <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start" }}>
+                    <div>
+                      <div style={{ fontWeight:700, fontSize:14, color:T.text }}>{t.vendor}</div>
+                      <div style={{ fontSize:11, color:T.textFaint, marginTop:2 }}>{t.project||"—"} · {t.analyst||"—"}</div>
+                    </div>
+                    <div style={{ padding:"3px 9px", borderRadius:20, background:"rgba(249,115,22,0.15)", border:"1px solid rgba(249,115,22,0.3)", color:"#F97316", fontSize:10, fontWeight:700 }}>À valider</div>
+                  </div>
+                  <div style={{ marginTop:12, display:"flex", justifyContent:"flex-end" }}>
+                    <button onClick={e=>{e.stopPropagation();setSelected(t);}}
+                      style={{ padding:"5px 12px", borderRadius:7, background:"rgba(249,115,22,0.15)", border:"1px solid rgba(249,115,22,0.3)", color:"#F97316", cursor:"pointer", fontSize:11, fontWeight:600 }}>
+                      Valider →
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
-          <div style={{ position:"relative", minWidth:240 }}>
-            <span style={{ position:"absolute", left:11, top:"50%", transform:"translateY(-50%)", color:"rgba(255,255,255,0.25)", pointerEvents:"none", display:"flex" }}><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></span>
-            <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Rechercher…"
-              style={{ width:"100%", padding:"8px 32px 8px 30px", borderRadius:8, background:"rgba(255,255,255,0.05)", border:"1px solid rgba(255,255,255,0.1)", color:"#fff", fontSize:12, outline:"none", boxSizing:"border-box" }} />
-            {search && <button onClick={() => setSearch("")}
-              style={{ position:"absolute", right:10, top:"50%", transform:"translateY(-50%)", background:"none", border:"none", color:"rgba(255,255,255,0.5)", cursor:"pointer", fontSize:14 }}>✕</button>}
+        )}
+
+        {/* ── SECTION HEADER: Tous les tickets ── */}
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:14 }}>
+          <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+            <div style={{ width:4, height:20, borderRadius:2, background:"#E30613" }} />
+            <span style={{ fontSize:15, fontWeight:700, color:T.text }}>Tous les tickets</span>
+            <span style={{ padding:"2px 8px", borderRadius:20, background:"rgba(227,6,19,0.12)", color:"#E30613", fontSize:11, fontWeight:700 }}>{filteredTickets.length}</span>
+          </div>
+          {/* Filters inline */}
+          <div style={{ display:"flex", gap:6, alignItems:"center" }}>
+            <div style={{ display:"flex", gap:2, background:T.filterBg, border:`1px solid ${T.border}`, borderRadius:10, padding:3 }}>
+              {FILTERS.map(({ key, label, count }) => (
+                <button key={key} onClick={() => setFilter(key)} className="filter-tab"
+                  style={{ padding:"4px 11px", borderRadius:7, cursor:"pointer", fontSize:11, fontWeight:filter===key?700:400,
+                    background:filter===key?"#E30613":"transparent", border:"none",
+                    color:filter===key?"#fff":T.filterText, transition:"all 0.15s" }}>
+                  {label}{count>0&&filter!==key&&<span style={{ marginLeft:4, fontSize:10, opacity:0.6 }}>{count}</span>}
+                </button>
+              ))}
+            </div>
+            {/* Search */}
+            <div style={{ position:"relative" }}>
+              <span style={{ position:"absolute", left:10, top:"50%", transform:"translateY(-50%)", color:T.textFaint, display:"flex", pointerEvents:"none" }}>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+              </span>
+              <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Rechercher…"
+                style={{ padding:"6px 10px 6px 28px", borderRadius:8, background:T.inputBg, border:`1px solid ${T.inputBorder}`, color:T.inputText, fontSize:11, outline:"none", width:180 }} />
+            </div>
           </div>
         </div>
 
         {/* ── Admin delete bar ── */}
         {isAdmin && someChecked && (
-          <div style={{ display:"flex", alignItems:"center", gap:12, padding:"10px 16px", background:"rgba(227,6,19,0.1)", border:"1px solid rgba(227,6,19,0.3)", borderRadius:10, marginBottom:14 }}>
-            <span style={{ color:"#E30613", fontSize:13, fontWeight:600 }}>{checkedIds.size} ticket{checkedIds.size>1?"s":""} sélectionné{checkedIds.size>1?"s":""}</span>
-            <button onClick={() => setConfirmDelete(true)} disabled={deleting}
-              style={{ padding:"5px 14px", borderRadius:7, background:"#E30613", border:"none", color:"#fff", cursor:"pointer", fontSize:12, fontWeight:600 }}>
-              🗑 Supprimer
+          <div style={{ display:"flex", alignItems:"center", gap:12, padding:"10px 16px", background: dark?"rgba(227,6,19,0.08)":"#fff0f0", border:"1px solid rgba(227,6,19,0.2)", borderRadius:10, marginBottom:12 }}>
+            <span style={{ color:"#E30613", fontSize:12, fontWeight:600 }}>{checkedIds.size} sélectionné{checkedIds.size>1?"s":""}</span>
+            <button onClick={()=>setConfirmDelete(true)} disabled={deleting}
+              style={{ padding:"4px 12px", borderRadius:7, background:"#E30613", border:"none", color:"#fff", cursor:"pointer", fontSize:11, fontWeight:600, display:"flex", alignItems:"center", gap:5 }}>
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M9 6V4h6v2"/></svg>
+              Supprimer
             </button>
-            <button onClick={() => setCheckedIds(new Set())}
-              style={{ padding:"5px 12px", borderRadius:7, background:"transparent", border:"1px solid rgba(227,6,19,0.4)", color:"#E30613", cursor:"pointer", fontSize:12 }}>
-              Désélectionner
-            </button>
+            <button onClick={()=>setCheckedIds(new Set())} style={{ padding:"4px 10px", borderRadius:7, background:"transparent", border:"1px solid rgba(227,6,19,0.3)", color:"#E30613", cursor:"pointer", fontSize:11 }}>Annuler</button>
           </div>
         )}
 
-        {/* ── Table ── */}
-        <div style={{ background:"rgba(255,255,255,0.03)", borderRadius:14, border:"1px solid rgba(255,255,255,0.08)", overflow:"hidden", backdropFilter:"blur(8px)" }}>
+        {/* ── TABLE ── */}
+        <div style={{ background:T.surface, borderRadius:16, border:`1px solid ${T.border}`, overflow:"hidden", boxShadow: dark?"none":"0 4px 24px rgba(18,33,75,0.07)" }}>
           {loading ? (
-            <div style={{ padding:56, textAlign:"center", color:"rgba(255,255,255,0.5)", fontSize:13 }}>
-              <div style={{ width:8, height:8, borderRadius:"50%", background:"#3A5FBF", display:"inline-block", animation:"blink 1.4s infinite", marginRight:10 }} />
+            <div style={{ padding:64, textAlign:"center", color:T.textFaint, fontSize:13 }}>
+              <div style={{ width:8, height:8, borderRadius:"50%", background:"#E30613", display:"inline-block", animation:"blink 1.4s infinite", marginRight:10 }} />
               Chargement…
             </div>
           ) : filteredTickets.length === 0 ? (
-            <div style={{ padding:72, textAlign:"center" }}>
-              <div style={{ fontSize:42, marginBottom:12, opacity:0.4 }}>📋</div>
-              <div style={{ color:"rgba(255,255,255,0.55)", fontSize:14, marginBottom:20 }}>
+            <div style={{ padding:80, textAlign:"center" }}>
+              <div style={{ width:64, height:64, borderRadius:18, background:T.surfaceMid, border:`1px solid ${T.border}`, display:"flex", alignItems:"center", justifyContent:"center", margin:"0 auto 18px" }}>
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke={T.textFaint} strokeWidth="1.5" strokeLinecap="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></svg>
+              </div>
+              <div style={{ color:T.textMuted, fontSize:14, fontWeight:500, marginBottom:6 }}>
                 {search ? `Aucun résultat pour "${search}"` : "Aucun ticket pour l'instant"}
               </div>
-              {!search && <button onClick={() => setShowUpload(true)}
-                style={{ padding:"9px 22px", borderRadius:8, background:"#E30613", border:"none", color:"#fff", cursor:"pointer", fontSize:13, fontWeight:600 }}>
-                Créer le premier ticket
+              <div style={{ color:T.textFaint, fontSize:12, marginBottom:20 }}>Créez votre premier ticket d'analyse</div>
+              {!search && <button onClick={()=>setShowUpload(true)}
+                style={{ padding:"9px 22px", borderRadius:10, background:"#E30613", border:"none", color:"#fff", cursor:"pointer", fontSize:13, fontWeight:700 }}>
+                + Nouveau ticket
               </button>}
             </div>
           ) : (
             <table style={{ width:"100%", borderCollapse:"collapse" }}>
               <thead>
-                <tr style={{ background:"rgba(0,0,0,0.25)", borderBottom:"1px solid rgba(255,255,255,0.06)" }}>
-                  {isAdmin && <th style={{ padding:"11px 14px", width:36 }}><input type="checkbox" checked={allChecked} onChange={toggleAll} /></th>}
-                  {["Fournisseur / Projet","Analyste / Approuvé par","Décision","Statut","Créé le","Actions"].map(h => (
-                    <th key={h} style={{ padding:"11px 16px", textAlign:"left", color:"rgba(255,255,255,0.45)", fontSize:10, fontWeight:600, letterSpacing:"0.1em" }}>{h.toUpperCase()}</th>
+                <tr style={{ background: dark?"rgba(0,0,0,0.3)":"#f8fafc", borderBottom:`1px solid ${T.border}` }}>
+                  {isAdmin && <th style={{ padding:"13px 16px", width:40 }}><input type="checkbox" checked={allChecked} onChange={toggleAll} /></th>}
+                  {["Fournisseur","Analyste / Validation","Décision","Statut","Date","Actions"].map(h => (
+                    <th key={h} style={{ padding:"13px 18px", textAlign:"left", color:T.thText, fontSize:10, fontWeight:700, letterSpacing:"0.12em" }}>{h.toUpperCase()}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
                 {filteredTickets.map(t => (
                   <TicketRow key={t.id} ticket={t}
-                    onSelect={isAdmin ? () => {} : setSelected}
+                    onSelect={setSelected}
                     adminMode={isAdmin}
                     checked={checkedIds.has(t.id)}
-                    onCheck={e => toggleCheck(t.id, e)}
+                    onCheck={e=>toggleCheck(t.id,e)}
+                    dark={dark} T={T}
                   />
                 ))}
               </tbody>
@@ -1721,16 +2229,16 @@ function DashboardApp({ currentUser, onLogout }) {
         </div>
 
         {search && filteredTickets.length > 0 && (
-          <div style={{ marginTop:10, color:"rgba(255,255,255,0.45)", fontSize:12 }}>
+          <div style={{ marginTop:10, color:T.textFaint, fontSize:12 }}>
             {filteredTickets.length} résultat{filteredTickets.length>1?"s":""} pour « {search} »
           </div>
         )}
       </div>
 
-      {showUpload   && <UploadModal onClose={() => setShowUpload(false)} onLaunched={id => { setShowUpload(false); setTrackingId(id); setLastRefresh(Date.now()); }} />}
-      {trackingId   && <LiveTrackingModal ticketId={trackingId} onClose={() => { setTrackingId(null); setLastRefresh(Date.now()); }} onRefreshList={() => setLastRefresh(Date.now())} />}
-      {selected     && <DetailModal ticket={selected} onClose={() => setSelected(null)} onDone={() => { setSelected(null); setLastRefresh(Date.now()); }} />}
-      {confirmDelete && <ConfirmDeleteModal count={checkedIds.size} onConfirm={deleteSelected} onCancel={() => setConfirmDelete(false)} />}
+      {showUpload   && <UploadModal onClose={()=>setShowUpload(false)} onLaunched={id=>{ setShowUpload(false); setTrackingId(id); setLastRefresh(Date.now()); }} />}
+      {trackingId   && <LiveTrackingModal ticketId={trackingId} onClose={()=>{ setTrackingId(null); setLastRefresh(Date.now()); }} onRefreshList={()=>setLastRefresh(Date.now())} />}
+      {selected     && <DetailModal ticket={selected} onClose={()=>setSelected(null)} onDone={()=>{ setSelected(null); setLastRefresh(Date.now()); }} dark={dark} />}
+      {confirmDelete && <ConfirmDeleteModal count={checkedIds.size} onConfirm={deleteSelected} onCancel={()=>setConfirmDelete(false)} />}
     </div>
   );
 }
