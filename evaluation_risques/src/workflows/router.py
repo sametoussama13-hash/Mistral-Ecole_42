@@ -36,7 +36,7 @@ class TPRAWorkflow(wfk.InteractiveWorkflow):
         import json
         from workflows.extractor import extract_text
         from workflows.analyzer import analyze_risks
-        from workflows.scorer import score_responses
+        from workflows.scorer import score_questions, evaluate_showstoppers
         from workflows.reporter import generate_text_report, export_excel
 
         # Step 1: Extract
@@ -46,8 +46,16 @@ class TPRAWorkflow(wfk.InteractiveWorkflow):
         analysis = await analyze_risks(text, input.vendor, input.project)
         analysis_dict = analysis.model_dump()
 
-        # Step 3: Score + recalculate risk levels (returned explicitly in ScoringResult)
-        scoring = await score_responses(text, input.vendor, analysis_dict)
+        # Step 3a: Scoring parallèle par groupes de 5
+        #   → 3 workers par groupe (score + analyze + piece_jointe)
+        #   → max 10 appels simultanés via Semaphore
+        raw_scores = await score_questions(text, input.vendor, analysis_dict)
+
+        # Step 3b: Décision finale déterministe + résumé exécutif
+        #   → showstoppers (score==1 + topic critique)
+        #   → fusion risks analyzer + risks groupes
+        #   → recalcul niveaux de risque depuis scores réels
+        scoring = await evaluate_showstoppers(input.vendor, analysis_dict, raw_scores)
 
         # Use updated values from scorer
         final_decision    = scoring.final_decision
