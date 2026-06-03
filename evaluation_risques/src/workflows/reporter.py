@@ -42,7 +42,9 @@ async def generate_text_report(
     from workflows.scorer import ScoringResult
 
     analysis = RiskAnalysis(**analysis) if isinstance(analysis, dict) else analysis
-    scoring  = ScoringResult(**scoring)  if isinstance(scoring, dict)  else scoring
+
+    if isinstance(scoring, dict):
+        scoring = ScoringResult(**{k: v for k, v in scoring.items() if k in ScoringResult.model_fields})
 
     decision_emoji = DECISION_EMOJI.get(analysis.final_decision, "❓")
     overall_emoji  = LEVEL_EMOJI.get(analysis.overall_score, "⚪")
@@ -70,8 +72,10 @@ async def generate_text_report(
     lines += [f"--- IDENTIFIED RISKS ({len(analysis.risks)}) ---"]
     for i, risk in enumerate(analysis.risks, 1):
         e = LEVEL_EMOJI.get(risk.level, "⚪")
+        ids = ", ".join(risk.related_question_ids) if risk.related_question_ids else "—"
         lines += [
             f"{i}. [{e} {risk.level}] {risk.title}",
+            f"   📎 Questions: {ids}",
             f"   → {risk.description}",
             f"   ✅ {risk.recommendation}",
             "",
@@ -100,10 +104,10 @@ async def export_excel(
 ) -> str:
     """
     Generates the final Excel report with multiple sheets:
-    - Summary      : key metrics and decision
-    - Risks        : all identified risks
-    - Question Scores : per-question scores, flags, follow-ups
-    - Showstoppers : critical blocking issues
+    - Summary         : key metrics and decision
+    - Question Scores : per-question scores, flags, follow-ups, linked risks
+    - Risks           : all identified risks with linked question IDs
+    - Showstoppers    : critical blocking issues
     """
     import os
     import tempfile
@@ -111,13 +115,13 @@ async def export_excel(
     from workflows.analyzer import RiskAnalysis
     from workflows.scorer import ScoringResult
     import openpyxl
-    from openpyxl.styles import (
-        PatternFill, Font, Alignment, Border, Side
-    )
+    from openpyxl.styles import PatternFill, Font, Alignment, Border, Side
     from openpyxl.utils import get_column_letter
 
     analysis = RiskAnalysis(**analysis) if isinstance(analysis, dict) else analysis
-    scoring  = ScoringResult(**scoring)  if isinstance(scoring, dict)  else scoring
+
+    if isinstance(scoring, dict):
+        scoring = ScoringResult(**{k: v for k, v in scoring.items() if k in ScoringResult.model_fields})
 
     # ── Color palette ────────────────────────────────────────────────────────
     COLORS = {
@@ -132,10 +136,10 @@ async def export_excel(
         2: "E67E22",
         3: "F1C40F",
         4: "27AE60",
-        "header":   "1A252F",
-        "subheader":"2C3E50",
-        "light":    "ECF0F1",
-        "white":    "FFFFFF",
+        "header":    "1A252F",
+        "subheader": "2C3E50",
+        "light":     "ECF0F1",
+        "white":     "FFFFFF",
     }
 
     def fill(hex_color: str) -> PatternFill:
@@ -163,6 +167,13 @@ async def export_excel(
             for cell in row:
                 cell.border = border
 
+    # ── Build cross-reference: question_id → list of risk titles ────────────
+    # Used to populate "Linked Risks" column in Question Scores sheet
+    question_to_risks: dict[str, list[str]] = {}
+    for risk in analysis.risks:
+        for qid in risk.related_question_ids:
+            question_to_risks.setdefault(qid, []).append(risk.title)
+
     # ── Create workbook ──────────────────────────────────────────────────────
     wb = openpyxl.Workbook()
 
@@ -185,7 +196,6 @@ async def export_excel(
             cell.font = bold_font("FFFFFF", 10)
         apply_border(ws, r, r, 1, 2)
 
-    # Title
     ws.merge_cells("A1:B1")
     ws["A1"] = "TPRA — Third Party Risk Assessment Report"
     ws["A1"].font = bold_font("FFFFFF", 14)
@@ -195,20 +205,20 @@ async def export_excel(
 
     ws.append([])  # spacer
 
-    add_kv("Vendor",          vendor)
-    add_kv("Project",         project)
-    add_kv("Analyst",         analyst)
-    add_kv("Date",            datetime.now().strftime("%Y-%m-%d %H:%M"))
-    add_kv("Risk Level",      analysis.overall_score,
+    add_kv("Vendor",           vendor)
+    add_kv("Project",          project)
+    add_kv("Analyst",          analyst)
+    add_kv("Date",             datetime.now().strftime("%Y-%m-%d %H:%M"))
+    add_kv("Risk Level",       analysis.overall_score,
            COLORS.get(analysis.overall_score, "555555"))
-    add_kv("Global Score",    f"{scoring.global_score:.1f} / 4.0",
+    add_kv("Global Score",     f"{scoring.global_score:.1f} / 4.0",
            COLORS.get(round(scoring.global_score), "555555"))
-    add_kv("Final Decision",  analysis.final_decision,
+    add_kv("Final Decision",   analysis.final_decision,
            COLORS.get(analysis.final_decision, "555555"))
-    add_kv("Showstoppers",    scoring.showstopper_count,
+    add_kv("Showstoppers",     scoring.showstopper_count,
            "C0392B" if scoring.showstopper_count > 0 else "27AE60")
-    add_kv("Questions scored",len(scoring.question_scores))
-    add_kv("Scores ≤ 2",      scoring.low_score_count,
+    add_kv("Questions scored", len(scoring.question_scores))
+    add_kv("Scores ≤ 2",       scoring.low_score_count,
            "C0392B" if scoring.low_score_count > 0 else "27AE60")
 
     ws.append([])
@@ -226,11 +236,22 @@ async def export_excel(
 
     # ════════════════════════════════════════════════════════════════════════
     # Sheet 2 — Question Scores
+    # ── Nouvelle colonne "Linked Risks" pour retrouver les risques par ID ───
     # ════════════════════════════════════════════════════════════════════════
     ws2 = wb.create_sheet("Question Scores")
-    headers = ["ID", "Question", "Vendor Response", "Score", "Level",
-               "Justification", "Showstopper", "Flag Reason", "Follow-up Question"]
-    widths  = [12, 35, 40, 8, 18, 35, 12, 30, 40]
+    headers = [
+        "ID",
+        "Question",
+        "Vendor Response",
+        "Score",
+        "Level",
+        "Justification",
+        "Linked Risks",        # ← NOUVEAU : risques liés à cette question
+        "Showstopper",
+        "Flag Reason",
+        "Follow-up Question",
+    ]
+    widths = [12, 35, 40, 8, 18, 35, 45, 12, 30, 40]
 
     ws2.append(headers)
     header_style(ws2, 1, len(headers))
@@ -240,6 +261,11 @@ async def export_excel(
 
     for q in scoring.question_scores:
         label = SCORE_LABEL.get(q.score, "?")
+
+        # Risques liés à cette question (via le cross-ref construit plus haut)
+        linked_risk_titles = question_to_risks.get(q.question_id, [])
+        linked_risks_str = "\n".join(f"• {t}" for t in linked_risk_titles) if linked_risk_titles else "—"
+
         row = [
             q.question_id,
             q.question,
@@ -247,6 +273,7 @@ async def export_excel(
             q.score,
             label,
             q.justification,
+            linked_risks_str,  # ← colonne 7
             "🚨 YES" if q.is_showstopper else "No",
             q.flag_reason,
             q.follow_up_question,
@@ -254,32 +281,33 @@ async def export_excel(
         ws2.append(row)
         r = ws2.max_row
 
-        # Score column color
+        # Score column color (col 4)
         sc = ws2.cell(r, 4)
         sc.fill = fill(COLORS.get(q.score, "FFFFFF"))
         sc.font = bold_font("FFFFFF", 10)
         sc.alignment = Alignment(horizontal="center")
 
-        # Showstopper row highlight
+        # Showstopper highlight (col 8)
         if q.is_showstopper:
             ws2.cell(r, 1).fill = fill("FADBD8")
-            ws2.cell(r, 7).fill = fill("C0392B")
-            ws2.cell(r, 7).font = bold_font("FFFFFF", 10)
+            ws2.cell(r, 8).fill = fill("C0392B")
+            ws2.cell(r, 8).font = bold_font("FFFFFF", 10)
 
         # Wrap text for long columns
-        for col in [2, 3, 6, 8, 9]:
-            ws2.cell(r, col).alignment = Alignment(wrap_text=True)
-        ws2.row_dimensions[r].height = 40
+        for col in [2, 3, 6, 7, 9, 10]:
+            ws2.cell(r, col).alignment = Alignment(wrap_text=True, vertical="top")
+        ws2.row_dimensions[r].height = max(40, 15 * len(linked_risk_titles)) if linked_risk_titles else 40
 
     apply_border(ws2, 1, ws2.max_row, 1, len(headers))
     ws2.freeze_panes = "A2"
 
     # ════════════════════════════════════════════════════════════════════════
     # Sheet 3 — Risks
+    # ── Nouvelle colonne "Question IDs" pour retrouver les questions par risque
     # ════════════════════════════════════════════════════════════════════════
     ws3 = wb.create_sheet("Risks")
-    risk_headers = ["#", "Title", "Level", "Description", "Recommendation"]
-    risk_widths  = [5, 30, 12, 50, 50]
+    risk_headers = ["#", "Title", "Level", "Question IDs", "Description", "Recommendation"]
+    risk_widths  = [5, 30, 12, 30, 50, 50]
 
     ws3.append(risk_headers)
     header_style(ws3, 1, len(risk_headers))
@@ -288,15 +316,29 @@ async def export_excel(
         set_col_width(ws3, i, w)
 
     for i, risk in enumerate(analysis.risks, 1):
-        ws3.append([i, risk.title, risk.level, risk.description, risk.recommendation])
+        # IDs des questions liées, séparés par des sauts de ligne
+        q_ids_str = "\n".join(risk.related_question_ids) if risk.related_question_ids else "—"
+
+        ws3.append([i, risk.title, risk.level, q_ids_str, risk.description, risk.recommendation])
         r = ws3.max_row
+
+        # Level column color (col 3)
         lc = ws3.cell(r, 3)
         lc.fill = fill(COLORS.get(risk.level, "FFFFFF"))
         lc.font = bold_font("FFFFFF", 9)
-        lc.alignment = Alignment(horizontal="center")
-        for col in [4, 5]:
-            ws3.cell(r, col).alignment = Alignment(wrap_text=True)
-        ws3.row_dimensions[r].height = 45
+        lc.alignment = Alignment(horizontal="center", vertical="top")
+
+        # Question IDs column : centré et wrap
+        qc = ws3.cell(r, 4)
+        qc.alignment = Alignment(wrap_text=True, vertical="top", horizontal="center")
+        qc.font = Font(bold=True, color="2C3E50", size=9)
+
+        # Description & Recommendation : wrap
+        for col in [5, 6]:
+            ws3.cell(r, col).alignment = Alignment(wrap_text=True, vertical="top")
+
+        n_ids = len(risk.related_question_ids) if risk.related_question_ids else 1
+        ws3.row_dimensions[r].height = max(45, 15 * n_ids)
 
     apply_border(ws3, 1, ws3.max_row, 1, len(risk_headers))
     ws3.freeze_panes = "A2"
@@ -312,7 +354,6 @@ async def export_excel(
     ws4["A1"].alignment = Alignment(horizontal="center")
     ws4.row_dimensions[1].height = 25
 
-    # Showstoppers from analyzer
     if analysis.showstoppers:
         ws4.append(["#", "Description", "Action Required"])
         header_style(ws4, 2, 3, "2C3E50")
@@ -328,7 +369,6 @@ async def export_excel(
             ws4.row_dimensions[r].height = 35
         apply_border(ws4, 2, ws4.max_row, 1, 3)
 
-    # Also list questions flagged as showstoppers
     ss_questions = [q for q in scoring.question_scores if q.is_showstopper]
     if ss_questions:
         ws4.append([])
