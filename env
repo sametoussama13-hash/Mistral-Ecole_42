@@ -1,0 +1,4 @@
+MISTRAL_API_KEY=
+SERVER_URL=https://api.mistral.ai
+DEPLOYMENT_NAME=
+WORKFLOW_DIR=/home/..../CMA_CGM/mistral/evaluation_risques
