@@ -1,10 +1,9 @@
 """
 analyzer.py
 ===========
-Responsible for analyzing cyber risks in a document.
-Takes plain text as input and returns a structured RiskAnalysis object.
- 
-This is the only file that calls the Mistral API directly.
+Step 1: Analyze cyber risks from the document.
+Returns a structured RiskAnalysis with risks, exceptions, derogations.
+Does NOT score individual lines — that is done by scorer.py.
 """
 
 import json
@@ -13,48 +12,70 @@ import os
 import mistralai.workflows as wfk
 from pydantic import BaseModel
 
-# --------------------------------##
-# Data models
-# --------------------------------##
 
+# ---------------------------------------------------------------------------
+# Data models
+# ---------------------------------------------------------------------------
 
 class Risk(BaseModel):
-    """Init risks."""
     title: str
-    level: str
+    level: str            # Critical / High / Medium / Low
     description: str
     recommendation: str
 
 
 class RiskAnalysis(BaseModel):
-    """Init full Risks."""
     executive_summary: str
     risks: list[Risk]
     exceptions: list[str]
     derogations: list[str]
-    overall_score: str
+    overall_score: str    # Critical / High / Medium / Low
 
 
-# --------------------------------##
-# Activity called by router
-# --------------------------------##
+# ---------------------------------------------------------------------------
+# Activity
+# ---------------------------------------------------------------------------
 
 @wfk.activity()
-async def analyze_risks(
-    text: str,
-    vendor: str,
-    project: str
-) -> RiskAnalysis:
-    """Sends the extracted text to Mistral and gets back a structured risk analysis."""
+async def analyze_risks(text: str, vendor: str, project: str) -> RiskAnalysis:
+    """Identifies risks in the document. Simple focused prompt."""
     from mistralai.client import Mistral
 
-    # --- Step 1: Connect to Mistral API ---
     client = Mistral(api_key=os.environ["MISTRAL_API_KEY"])
 
-    # --- Step 2: Build the prompt ---
-    prompt = _build_prompt(text, vendor, project)
+    prompt = f"""
+You are a cybersecurity expert performing a Third Party Risk Assessment (TPRA).
 
-    # --- Step 3: Call the Mistral API ---
+Vendor: {vendor}
+Project: {project}
+
+Document:
+---
+{text[:8000]}
+---
+
+Identify the main cybersecurity risks in this document.
+Respond ONLY with valid JSON:
+{{
+  "executive_summary": "3-4 sentence summary of the vendor's risk posture",
+  "risks": [
+    {{
+      "title": "Short risk name",
+      "level": "Critical|High|Medium|Low",
+      "description": "What the risk is and why it matters",
+      "recommendation": "Concrete action to mitigate this risk"
+    }}
+  ],
+  "exceptions": ["Exception found in the document"],
+  "derogations": ["Derogation found in the document"],
+  "overall_score": "Critical|High|Medium|Low"
+}}
+
+Rules:
+- overall_score = highest risk level found.
+- Respond ONLY with the JSON, no text before or after.
+"""
+
     response = client.chat.complete(
         model="mistral-large-latest",
         messages=[{"role": "user", "content": prompt}],
@@ -62,55 +83,17 @@ async def analyze_risks(
         temperature=0.2,
     )
 
-    # --- Step 4: Parse the JSON response into a RiskAnalysis object ---
-    raw = response.choices[0].message.content
-    data: dict = json.loads(raw)
+    data = json.loads(response.choices[0].message.content)
+
+    # Normalize field names in case Mistral uses slightly different keys
+    normalized_risks = []
+    for r in data.get("risks", []):
+        normalized_risks.append({
+            "title":          r.get("title", ""),
+            "level":          r.get("level", "Medium"),
+            "description":    r.get("description", r.get("descreption", "")),
+            "recommendation": r.get("recommendation", r.get("mitigation", "")),
+        })
+    data["risks"] = normalized_risks
 
     return RiskAnalysis(**data)
-
-# --------------------------------##
-# Private helper
-# --------------------------------##
-
-
-def _build_prompt(text: str, vendor: str, project: str) -> str:
-    """Build prompt for mistral."""
-    return f"""
-You are a cybersecurity expert performing a Third Party Risk Assessment (TPRA).
-
-Vendor: {vendor}
-Project: {project}
-
-Document to analyze:
----
-{text[:8000]}
----
-
-For each line below analyze this document, assign a risk score from 0 to 100
-and respond ONLY with valid JSON using this exact structure:
-{{
-  "executive_summary": "3-4 sentence summary of the vendor's overall risk
-  posture",
-  "risks": [
-    {{
-      "scores": [
-        {{"score": 0}},
-        {{"score": 75}},
-        {{"score": 20}}
-      ]
-      "title": "Short risk name",
-      "level": "Critical|High|Medium|Low",
-      "description": "Detailed description of the identified risk",
-      "recommendation": "Concrete action to mitigate this risk"
-    }}
-  ],
-  "exceptions": ["Security exception 1", "Security exception 2"],
-  "derogations": ["Derogation 1"],
-  "overall_score": "Critical|High|Medium|Low"
-}}
-
-Rules:
-- If the document lacks information on a point, state it clearly in that field.
-- The overall_score must reflect the highest risk level found.
-- Respond ONLY with the JSON object, no text before or after.
-"""
