@@ -1,95 +1,259 @@
 """
 scorer.py
 =========
-Step 2: Score each question-response pair in the document.
-Returns a ScoringResult with a score per question and a global score.
-Runs after analyze_risks, independently.
+Scores questions (1-4) AND recalculates risk levels from actual scores.
+This ensures full consistency between scores and risk levels.
 """
 
 import json
 import os
+import re
 
 import mistralai.workflows as wfk
 from pydantic import BaseModel
 
 
-# ---------------------------------------------------------------------------
-# Data models
-# ---------------------------------------------------------------------------
-
 class QuestionScore(BaseModel):
-    question_id: str    # e.g. "2.1 AAC-01"
-    question: str       # Full question text
-    response: str       # Vendor's response
-    score: int          # 0 (very risky) → 100 (fully compliant)
-    justification: str  # Why this score
+    question_id: str
+    question: str
+    response: str
+    score: int              # 1 → 4
+    justification: str
+    is_showstopper: bool
+    flag_reason: str
+    follow_up_question: str
 
 
 class ScoringResult(BaseModel):
-    global_score: int              # Weighted average of all question scores
+    global_score: float
+    low_score_count: int
+    showstopper_count: int
     question_scores: list[QuestionScore]
 
 
-# ---------------------------------------------------------------------------
-# Activity
-# ---------------------------------------------------------------------------
+def _parse_questions(text: str) -> list[dict]:
+    questions = []
+    for line in text.split("\n"):
+        line = line.strip()
+        if not line:
+            continue
+        if re.match(r"^\d+\.\d+", line):
+            parts = line.split("\t")
+            if len(parts) >= 3:
+                questions.append({
+                    "question_id": parts[0].replace("*", "").strip(),
+                    "question":    parts[1].strip(),
+                    "response":    parts[2].strip(),
+                })
+            elif len(parts) == 2:
+                questions.append({
+                    "question_id": parts[0].replace("*", "").strip(),
+                    "question":    parts[1].strip(),
+                    "response":    "No response provided.",
+                })
+    return questions
 
-@wfk.activity()
-async def score_responses(text: str, vendor: str) -> ScoringResult:
-    """
-    Scores each question-response pair independently.
-    Simple focused prompt — only scoring, no risk analysis.
-    """
-    from mistralai.client import Mistral
 
-    client = Mistral(api_key=os.environ["MISTRAL_API_KEY"])
+def _fallback_parse(text: str) -> list[dict]:
+    questions = []
+    paragraphs = [p.strip() for p in text.split("\n\n") if p.strip()]
+    for i, para in enumerate(paragraphs):
+        questions.append({
+            "question_id": f"P{i+1:03d}",
+            "question":    para[:200],
+            "response":    para[200:700] if len(para) > 200 else "See question.",
+        })
+    return questions
 
-    prompt = f"""
-You are a cybersecurity auditor scoring a security questionnaire.
+
+def _score_to_level(avg_score: float) -> str:
+    """Converts average score (1-4) to risk level."""
+    if avg_score <= 1.5: return "Critical"
+    if avg_score <= 2.5: return "High"
+    if avg_score <= 3.5: return "Medium"
+    return "Low"
+
+
+def _build_batch_prompt(batch: list[dict], vendor: str, risks_summary: str) -> str:
+    questions_text = "\n\n".join(
+        f"ID: {q['question_id']}\n"
+        f"Question: {q['question'][:300]}\n"
+        f"Response: {q['response'][:500]}"
+        for q in batch
+    )
+    return f"""
+You are a cybersecurity auditor scoring a TPRA questionnaire.
 
 Vendor: {vendor}
 
-Security questionnaire (format: ID | Question | Response):
----
-{text[:8000]}
----
+Identified risks context:
+{risks_summary if risks_summary else "No specific risks identified."}
 
-For EACH question-response pair, assign a compliance score:
-- 0   = Critical non-compliance
-- 25  = High risk, major gaps
-- 50  = Medium risk, partial compliance
-- 75  = Low risk, mostly compliant
-- 100 = Fully compliant
+Score each question-response pair (1-4):
+- 1 = Non-compliant: Missing, off-topic, or critically incomplete
+- 2 = Partially compliant: Present but vague, without proof
+- 3 = Compliant: Complete and detailed but without concrete evidence
+- 4 = Mature: Complete, detailed, with evidence (certificates, audits)
 
-Then compute global_score as the average of all scores.
+Questions to score:
+---
+{questions_text}
+---
 
 Respond ONLY with valid JSON:
 {{
-  "global_score": 65,
   "question_scores": [
     {{
       "question_id": "2.1 AAC-01",
-      "question": "Full question text from the document",
-      "response": "The vendor's exact response",
-      "score": 75,
-      "justification": "Short explanation of the score"
+      "question": "Full question text",
+      "response": "Vendor response (max 200 chars)",
+      "score": 2,
+      "justification": "Short explanation (max 100 chars)",
+      "is_showstopper": false,
+      "flag_reason": "Why flagged, or empty string",
+      "follow_up_question": "Follow-up if needed, or empty string"
     }}
   ]
 }}
 
 Rules:
-- Use the EXACT question ID from the document (e.g. "2.1 AAC-01").
-- Every question must have a score.
-- If response is missing or vague, score it 25.
-- Respond ONLY with the JSON, no text before or after.
+- Score MUST be 1, 2, 3, or 4 only.
+- is_showstopper = true if score <= 2 AND topic is critical (security, GDPR, incidents, certs).
+- Process EVERY question, skip none.
+- Respond ONLY with JSON.
 """
 
-    response = client.chat.complete(
-        model="mistral-large-latest",
-        messages=[{"role": "user", "content": prompt}],
-        response_format={"type": "json_object"},
-        temperature=0.2,
+
+def _recalculate_risk_levels(analysis: dict, scores_by_id: dict) -> dict:
+    """
+    Recalculates each risk's level based on the average score
+    of its related questions.
+    Also recalculates overall_score and final_decision.
+    """
+    risks = analysis.get("risks", [])
+
+    for risk in risks:
+        related_ids = risk.get("related_question_ids", [])
+        related_scores = [
+            scores_by_id[qid]["score"]
+            for qid in related_ids
+            if qid in scores_by_id
+        ]
+        if related_scores:
+            avg = sum(related_scores) / len(related_scores)
+            risk["level"] = _score_to_level(avg)
+        else:
+            # No linked questions — use global average
+            if scores_by_id:
+                avg = sum(s["score"] for s in scores_by_id.values()) / len(scores_by_id)
+                risk["level"] = _score_to_level(avg)
+            else:
+                risk["level"] = "Medium"
+
+    # Recalculate overall_score
+    level_order = {"Critical": 4, "High": 3, "Medium": 2, "Low": 1}
+    if risks:
+        overall = max(risks, key=lambda r: level_order.get(r["level"], 0))["level"]
+    else:
+        overall = "Low"
+    analysis["overall_score"] = overall
+
+    # Recalculate final_decision
+    showstoppers = analysis.get("showstoppers", [])
+    if showstoppers or overall == "Critical":
+        analysis["final_decision"] = "Rejected"
+    elif overall == "High":
+        analysis["final_decision"] = "Approved with conditions"
+    else:
+        analysis["final_decision"] = "Approved"
+
+    return analysis
+
+
+@wfk.activity()
+async def score_responses(text: str, vendor: str, analysis: dict) -> ScoringResult:
+    """
+    1. Scores every question (1-4)
+    2. Recalculates risk levels from actual scores
+    3. Updates analysis dict in place
+    """
+    from mistralai.client import Mistral
+
+    client = Mistral(api_key=os.environ["MISTRAL_API_KEY"])
+
+    risks_summary = "\n".join(
+        f"- {r['title']}: {r['description'][:120]}"
+        for r in analysis.get("risks", [])
     )
 
-    data = json.loads(response.choices[0].message.content)
-    return ScoringResult(**data)
+    questions = _parse_questions(text)
+    if not questions:
+        questions = _fallback_parse(text)
+
+    batch_size = 25
+    batches = [questions[i:i+batch_size] for i in range(0, len(questions), batch_size)]
+    all_scores = []
+
+    for batch in batches:
+        if not batch:
+            continue
+        prompt = _build_batch_prompt(batch, vendor, risks_summary)
+        response = client.chat.complete(
+            model="mistral-large-latest",
+            messages=[{"role": "user", "content": prompt}],
+            response_format={"type": "json_object"},
+            temperature=0.2,
+        )
+        data = json.loads(response.choices[0].message.content)
+        all_scores.extend(data.get("question_scores", []))
+
+    # Deduplicate
+    seen = set()
+    unique_scores = []
+    for s in all_scores:
+        qid = s.get("question_id", "")
+        if qid not in seen:
+            seen.add(qid)
+            s["score"]              = max(1, min(4, int(s.get("score", 2))))
+            s["is_showstopper"]     = bool(s.get("is_showstopper", False))
+            s["flag_reason"]        = s.get("flag_reason", "")
+            s["follow_up_question"] = s.get("follow_up_question", "")
+            unique_scores.append(s)
+
+    # Build lookup dict: question_id → score info
+    scores_by_id = {s["question_id"]: s for s in unique_scores}
+
+    # Recalculate risk levels from actual scores
+    _recalculate_risk_levels(analysis, scores_by_id)
+
+    # Generate executive summary now that levels are final
+    if analysis.get("risks"):
+        from mistralai.client import Mistral as MistralClient
+        c2 = MistralClient(api_key=os.environ["MISTRAL_API_KEY"])
+        summary_prompt = f"""
+Write a 3-4 sentence executive summary for vendor {vendor}.
+Decision: {analysis['final_decision']} | Overall risk: {analysis['overall_score']}
+Showstoppers: {len(analysis.get('showstoppers', []))}
+Top risks: {', '.join(f'[{r["level"]}] {r["title"]}' for r in analysis['risks'][:5])}
+Respond with ONLY the summary text.
+"""
+        sr = c2.chat.complete(
+            model="mistral-large-latest",
+            messages=[{"role": "user", "content": summary_prompt}],
+            temperature=0.2,
+        )
+        analysis["executive_summary"] = sr.choices[0].message.content.strip()
+    else:
+        analysis["executive_summary"] = f"{vendor} shows a satisfactory security posture."
+
+    # Stats
+    global_score      = round(sum(s["score"] for s in unique_scores) / len(unique_scores), 2) if unique_scores else 0.0
+    low_score_count   = sum(1 for s in unique_scores if s["score"] <= 2)
+    showstopper_count = sum(1 for s in unique_scores if s["is_showstopper"])
+
+    return ScoringResult(
+        global_score=global_score,
+        low_score_count=low_score_count,
+        showstopper_count=showstopper_count,
+        question_scores=[QuestionScore(**s) for s in unique_scores],
+    )

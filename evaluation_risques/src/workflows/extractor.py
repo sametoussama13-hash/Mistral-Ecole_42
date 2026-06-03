@@ -1,29 +1,21 @@
 """
 extractor.py
 ============
-Responsible for extracting raw text from any input document.
-Currently supports:
-  - PDF files (received as base64-encoded string)
-  - Emails (received as plain text)
- 
-To add a new format (PPT, Word, etc.), just add a new activity
-and call it from router.py — nothing else needs to change.
+Extracts raw text from PDF, email, or Excel.
+Excel is read directly with pandas — no truncation.
 """
 
 import base64
 import os
+import re
 import tempfile
 
 import mistralai.workflows as wfk
 
-# --------------------------------##
-# Main activity
-# --------------------------------##
-
 
 @wfk.activity()
 async def extract_text(source_type: str, content: str) -> str:
-    """Entry point for text extraction from pdf or email."""
+    """Entry point for text extraction."""
     if source_type == "pdf":
         return await _extract_from_pdf(content)
     elif source_type == "email":
@@ -33,112 +25,93 @@ async def extract_text(source_type: str, content: str) -> str:
     else:
         return f"Unsupported source type: {source_type}"
 
-# --------------------------------##
-# Extract one per document type
-# --------------------------------##
-
 
 @wfk.activity()
 async def _extract_from_pdf(content: str) -> str:
     """Decodes a base64 PDF and extracts its text using pdfplumber."""
     try:
         import pdfplumber
-
-        # --- Step 1: Decode base64 > raw bytes ---
         pdf_bytes = base64.b64decode(content)
-
-        # --- Step 2:  Write bytes to a temporary file on disk ---
         with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
             tmp.write(pdf_bytes)
             tmp_path = tmp.name
-
-        # --- Step 3:  Open the temp file and extract text page by page ---
         text = ""
         with pdfplumber.open(tmp_path) as pdf:
             for page in pdf.pages:
                 page_text = page.extract_text()
                 if page_text:
                     text += page_text + "\n"
-
-        # --- Step 4:  Clean up the temp file ---
         os.unlink(tmp_path)
-
         return text if text else "No extractable text found in the PDF."
-    
     except Exception as e:
-        return f"PDF exctraction error: {e}"
-    
+        return f"PDF extraction error: {e}"
+
 
 @wfk.activity()
 async def _extract_from_email(content: str) -> str:
-    """Extract text in the email."""
+    """Cleans and returns plain text email content."""
     lines = content.splitlines()
-    cleaned = "\n".join(
-        line for line in lines
-        if line.strip()  # keep only non-empty lines
-    )
+    cleaned = "\n".join(line for line in lines if line.strip())
     return cleaned if cleaned else "Empty email content."
 
 
 @wfk.activity()
 async def _extract_from_excel(content: str) -> str:
-    """Extract text in the excel file."""
+    """
+    Reads Excel directly with pandas — no truncation.
+    Returns tab-separated lines: ID \\t Question \\t Response
+    """
     try:
-        import pandas
-        # --- Step 1:  Decode 64 bytes ---
+        import io
+        import pandas as pd
+
+        # Decode base64 → bytes (keep in memory, no temp file needed)
         excel_bytes = base64.b64decode(content)
+        excel_buffer = io.BytesIO(excel_bytes)
 
-        # --- Step 2:  write bytes to temp excel file ---
-        with tempfile.NamedTemporaryFile(suffix=".xlsx", delete=False) as tmp:
-            tmp.write(excel_bytes)
-            tmp_path = tmp.name
+        # Read raw without header to detect structure
+        df_raw = pd.read_excel(excel_buffer, header=None)
 
-        # --- Step 3:  Read all sheets ---
-        sheets = pandas.read_excel(tmp_path, sheet_name=None)
+        # Find the header row containing "Question" or "Description"
+        header_row = None
+        for i, row in df_raw.iterrows():
+            row_str = " ".join(str(v).lower() for v in row if pd.notna(v))
+            if "question" in row_str or "description" in row_str:
+                header_row = i
+                break
 
-        # --- Step 4:  convert sheet to text ---
-        text = ""
-        for sheet_name, df in sheets.items():
-            text += f"\n=== Sheet: {sheet_name} ===\n"
+        if header_row is None:
+            # No header found — return raw text
+            return df_raw.to_string(index=False)
 
-            headers = " | ".join(str(col) for col in df.columns)
-            text += headers + "\n"
+        # Get data rows (everything after the header)
+        data_rows = df_raw.iloc[header_row + 1:].reset_index(drop=True)
 
-            for _, row in df.iterrows():
-                if row.isna().all():
-                    continue
-                line = " | ".join(str(val) if not pandas.isna(val) else "" for val in row)
-                text += line + "\n"
+        # Build tab-separated output: ID \t Question \t Response
+        lines = []
+        for _, row in data_rows.iterrows():
+            vals = [str(v).strip() if pd.notna(v) else "" for v in row]
 
-        os.unlink(tmp_path)
+            # Need at least 3 columns
+            if len(vals) < 3:
+                continue
 
-        return text if text else "No extractable text found in the Excel file."
+            qid = vals[0].replace("*", "").strip()
+            question = vals[1].strip()
+            response = vals[2].strip()
+
+            # Only keep rows with a valid question ID (e.g. "2.1 AAC-01")
+            if not re.match(r"^\d+\.\d+", qid):
+                continue
+            if not question:
+                continue
+
+            lines.append(f"{qid}\t{question}\t{response}")
+
+        if not lines:
+            return "No questions found in Excel file."
+
+        return "\n".join(lines)
 
     except Exception as e:
         return f"Excel extraction error: {e}"
-
-
-
-
-
-
-
-# ---------------------------------------------------------------------------
-# How to add a new format (example: PPT)
-# ---------------------------------------------------------------------------
-#
-# 1. Add a new activity here:
-#
-#    @workflows.activity()
-#    async def _extract_from_ppt(content: str) -> str:
-#        # decode base64 → .pptx file
-#        # use python-pptx to extract slide text
-#        ...
-#
-# 2. Add a new condition in extract_text():
-#
-#    elif source_type == "ppt":
-#        return await _extract_from_ppt(content)
-#
-# Nothing else needs to change in the other files.
-# ---------------------------------------------------------------------------
