@@ -160,7 +160,6 @@ async def score_responses(text: str, vendor: str, analysis: dict) -> ScoringResu
             model="mistral-large-latest",
             messages=[{"role": "user", "content": prompt}],
             response_format={"type": "json_object"},
-            temperature=0.2,
         )
         data = json.loads(response.choices[0].message.content)
         all_scores.extend(data.get("question_scores", []))
