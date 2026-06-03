@@ -2,7 +2,7 @@
 scorer.py
 =========
 Scores questions (1-4) AND recalculates risk levels from actual scores.
-This ensures full consistency between scores and risk levels.
+Returns both ScoringResult AND updated analysis dict.
 """
 
 import json
@@ -17,7 +17,7 @@ class QuestionScore(BaseModel):
     question_id: str
     question: str
     response: str
-    score: int              # 1 → 4
+    score: int
     justification: str
     is_showstopper: bool
     flag_reason: str
@@ -29,6 +29,11 @@ class ScoringResult(BaseModel):
     low_score_count: int
     showstopper_count: int
     question_scores: list[QuestionScore]
+    # Updated analysis fields — returned explicitly so router can use them
+    updated_risks: list[dict]
+    overall_score: str
+    final_decision: str
+    executive_summary: str
 
 
 def _parse_questions(text: str) -> list[dict]:
@@ -67,7 +72,6 @@ def _fallback_parse(text: str) -> list[dict]:
 
 
 def _score_to_level(avg_score: float) -> str:
-    """Converts average score (1-4) to risk level."""
     if avg_score <= 1.5: return "Critical"
     if avg_score <= 2.5: return "High"
     if avg_score <= 3.5: return "Medium"
@@ -118,64 +122,18 @@ Respond ONLY with valid JSON:
 
 Rules:
 - Score MUST be 1, 2, 3, or 4 only.
-- is_showstopper = true if score <= 2 AND topic is critical (security, GDPR, incidents, certs).
+- is_showstopper = true if score <= 2 AND topic is critical.
 - Process EVERY question, skip none.
 - Respond ONLY with JSON.
 """
-
-
-def _recalculate_risk_levels(analysis: dict, scores_by_id: dict) -> dict:
-    """
-    Recalculates each risk's level based on the average score
-    of its related questions.
-    Also recalculates overall_score and final_decision.
-    """
-    risks = analysis.get("risks", [])
-
-    for risk in risks:
-        related_ids = risk.get("related_question_ids", [])
-        related_scores = [
-            scores_by_id[qid]["score"]
-            for qid in related_ids
-            if qid in scores_by_id
-        ]
-        if related_scores:
-            avg = sum(related_scores) / len(related_scores)
-            risk["level"] = _score_to_level(avg)
-        else:
-            # No linked questions — use global average
-            if scores_by_id:
-                avg = sum(s["score"] for s in scores_by_id.values()) / len(scores_by_id)
-                risk["level"] = _score_to_level(avg)
-            else:
-                risk["level"] = "Medium"
-
-    # Recalculate overall_score
-    level_order = {"Critical": 4, "High": 3, "Medium": 2, "Low": 1}
-    if risks:
-        overall = max(risks, key=lambda r: level_order.get(r["level"], 0))["level"]
-    else:
-        overall = "Low"
-    analysis["overall_score"] = overall
-
-    # Recalculate final_decision
-    showstoppers = analysis.get("showstoppers", [])
-    if showstoppers or overall == "Critical":
-        analysis["final_decision"] = "Rejected"
-    elif overall == "High":
-        analysis["final_decision"] = "Approved with conditions"
-    else:
-        analysis["final_decision"] = "Approved"
-
-    return analysis
 
 
 @wfk.activity()
 async def score_responses(text: str, vendor: str, analysis: dict) -> ScoringResult:
     """
     1. Scores every question (1-4)
-    2. Recalculates risk levels from actual scores
-    3. Updates analysis dict in place
+    2. Recalculates risk levels from actual question scores
+    3. Returns everything in ScoringResult (including updated risks)
     """
     from mistralai.client import Mistral
 
@@ -220,35 +178,59 @@ async def score_responses(text: str, vendor: str, analysis: dict) -> ScoringResu
             s["follow_up_question"] = s.get("follow_up_question", "")
             unique_scores.append(s)
 
-    # Build lookup dict: question_id → score info
-    scores_by_id = {s["question_id"]: s for s in unique_scores}
+    # Build lookup: question_id → score
+    scores_by_id = {s["question_id"]: s["score"] for s in unique_scores}
 
-    # Recalculate risk levels from actual scores
-    _recalculate_risk_levels(analysis, scores_by_id)
+    # Recalculate risk levels from linked question scores
+    risks = analysis.get("risks", [])
+    for risk in risks:
+        related_ids = risk.get("related_question_ids", [])
+        related_scores = [scores_by_id[qid] for qid in related_ids if qid in scores_by_id]
 
-    # Generate executive summary now that levels are final
-    if analysis.get("risks"):
-        from mistralai.client import Mistral as MistralClient
-        c2 = MistralClient(api_key=os.environ["MISTRAL_API_KEY"])
-        summary_prompt = f"""
+        if related_scores:
+            avg = sum(related_scores) / len(related_scores)
+        elif scores_by_id:
+            # No linked questions → use global average
+            avg = sum(scores_by_id.values()) / len(scores_by_id)
+        else:
+            avg = 2.0
+
+        risk["level"] = _score_to_level(avg)
+
+    # Recalculate overall_score
+    level_order = {"Critical": 4, "High": 3, "Medium": 2, "Low": 1}
+    if risks:
+        overall = max(risks, key=lambda r: level_order.get(r["level"], 0))["level"]
+    else:
+        overall = "Low"
+
+    # Recalculate final_decision
+    showstoppers = analysis.get("showstoppers", [])
+    if showstoppers or overall == "Critical":
+        final_decision = "Rejected"
+    elif overall == "High":
+        final_decision = "Approved with conditions"
+    else:
+        final_decision = "Approved"
+
+    # Generate executive summary
+    summary_prompt = f"""
 Write a 3-4 sentence executive summary for vendor {vendor}.
-Decision: {analysis['final_decision']} | Overall risk: {analysis['overall_score']}
-Showstoppers: {len(analysis.get('showstoppers', []))}
-Top risks: {', '.join(f'[{r["level"]}] {r["title"]}' for r in analysis['risks'][:5])}
+Decision: {final_decision} | Overall risk: {overall}
+Showstoppers: {len(showstoppers)}
+Top risks: {', '.join(f'[{r["level"]}] {r["title"]}' for r in risks[:5])}
 Respond with ONLY the summary text.
 """
-        sr = c2.chat.complete(
-            model="mistral-large-latest",
-            messages=[{"role": "user", "content": summary_prompt}],
-            temperature=0.2,
-        )
-        analysis["executive_summary"] = sr.choices[0].message.content.strip()
-    else:
-        analysis["executive_summary"] = f"{vendor} shows a satisfactory security posture."
+    sr = client.chat.complete(
+        model="mistral-large-latest",
+        messages=[{"role": "user", "content": summary_prompt}],
+        temperature=0.2,
+    )
+    executive_summary = sr.choices[0].message.content.strip()
 
     # Stats
-    global_score      = round(sum(s["score"] for s in unique_scores) / len(unique_scores), 2) if unique_scores else 0.0
-    low_score_count   = sum(1 for s in unique_scores if s["score"] <= 2)
+    global_score = round(sum(s["score"] for s in unique_scores) / len(unique_scores), 2) if unique_scores else 0.0
+    low_score_count = sum(1 for s in unique_scores if s["score"] <= 2)
     showstopper_count = sum(1 for s in unique_scores if s["is_showstopper"])
 
     return ScoringResult(
@@ -256,4 +238,9 @@ Respond with ONLY the summary text.
         low_score_count=low_score_count,
         showstopper_count=showstopper_count,
         question_scores=[QuestionScore(**s) for s in unique_scores],
+        # Return updated analysis fields explicitly
+        updated_risks=risks,
+        overall_score=overall,
+        final_decision=final_decision,
+        executive_summary=executive_summary,
     )

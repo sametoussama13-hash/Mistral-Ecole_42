@@ -1,14 +1,6 @@
 """
-router.py
-=========
-TPRA workflow — Use Case 2.
-Flow:
-  1. extract_text
-  2. analyze_risks      → identifies risks + related_question_ids
-  3. score_responses    → scores questions + recalculates risk levels
-  4. generate_text_report
-  5. ⏸️ human validation
-  6. export_excel
+router.py — TPRA Use Case 2
+Risk levels are recalculated by scorer and returned explicitly.
 """
 
 import mistralai.workflows as wfk
@@ -43,33 +35,42 @@ class TPRAWorkflow(wfk.InteractiveWorkflow):
     async def run(self, input: TPRAInput) -> str:
         import json
         from workflows.extractor import extract_text
-        from workflows.analyzer import analyze_risks, RiskAnalysis
+        from workflows.analyzer import analyze_risks
         from workflows.scorer import score_responses
         from workflows.reporter import generate_text_report, export_excel
 
-        # Step 1: Extract text
+        # Step 1: Extract
         text = await extract_text(input.source_type, input.content)
 
-        # Step 2: Analyze risks (returns risks with related_question_ids, no levels yet)
+        # Step 2: Analyze (identifies risks + related_question_ids, no levels yet)
         analysis = await analyze_risks(text, input.vendor, input.project)
-
-        # Step 3: Score questions + recalculate risk levels from scores
-        # analysis_dict is modified IN PLACE by scorer (levels + summary updated)
         analysis_dict = analysis.model_dump()
+
+        # Step 3: Score + recalculate risk levels (returned explicitly in ScoringResult)
         scoring = await score_responses(text, input.vendor, analysis_dict)
 
-        # Rebuild analysis with updated levels/summary from scorer
-        analysis = RiskAnalysis(**analysis_dict)
+        # Use updated values from scorer
+        final_decision    = scoring.final_decision
+        overall_score     = scoring.overall_score
+        executive_summary = scoring.executive_summary
+        updated_risks     = scoring.updated_risks
 
-        # Step 4: Generate text report for human review
+        # Step 4: Generate text report
+        report_analysis = {
+            **analysis_dict,
+            "risks":             updated_risks,
+            "overall_score":     overall_score,
+            "final_decision":    final_decision,
+            "executive_summary": executive_summary,
+        }
         text_report = await generate_text_report(
-            analysis_dict, scoring, input.vendor, input.project, input.analyst
+            report_analysis, scoring, input.vendor, input.project, input.analyst
         )
 
         # Step 5: Human validation ⏸️
         await workflows_mistralai.send_assistant_message(
             f"TPRA Report ready for {input.vendor}.\n\n"
-            f"Decision: {analysis.final_decision} | "
+            f"Decision: {final_decision} | "
             f"Score: {scoring.global_score:.1f}/4.0 | "
             f"Showstoppers: {scoring.showstopper_count}\n\n"
             f"{text_report}"
@@ -78,7 +79,7 @@ class TPRAWorkflow(wfk.InteractiveWorkflow):
             workflows_mistralai.AcceptDeclineConfirmation(
                 description=(
                     f"Review TPRA for {input.vendor} — "
-                    f"Decision: {analysis.final_decision} | "
+                    f"Decision: {final_decision} | "
                     f"Score: {scoring.global_score:.1f}/4.0 | "
                     f"Showstoppers: {scoring.showstopper_count}. "
                     f"Approve to generate the Excel report."
@@ -94,40 +95,31 @@ class TPRAWorkflow(wfk.InteractiveWorkflow):
                 "vendor":         input.vendor,
                 "project":        input.project,
                 "analyst":        input.analyst,
-                "final_decision": analysis.final_decision,
-                "overall_score":  analysis.overall_score,
+                "final_decision": final_decision,
+                "overall_score":  overall_score,
                 "global_score":   scoring.global_score,
                 "message":        f"Report manually rejected by {input.analyst}.",
             })
 
-        # Step 6: Export Excel triggered by human approval
+        # Step 6: Export Excel
         excel_path = await export_excel(
-            analysis_dict, scoring,
+            report_analysis, scoring,
             input.vendor, input.project, input.analyst,
         )
 
         return json.dumps({
-            "status":          "approved",
-            "final_decision":  analysis.final_decision,
-            "overall_score":   analysis.overall_score,
-            "vendor":          input.vendor,
-            "project":         input.project,
-            "analyst":         input.analyst,
-            "excel_path":      excel_path,
-            "executive_summary": analysis.executive_summary,
-            "showstoppers":    analysis.showstoppers,
-            "risks": [
-                {
-                    "title":                r.title,
-                    "level":               r.level,
-                    "description":         r.description,
-                    "recommendation":      r.recommendation,
-                    "related_question_ids": r.related_question_ids,
-                }
-                for r in analysis.risks
-            ],
-            "exceptions":        analysis.exceptions,
-            "derogations":       analysis.derogations,
+            "status":            "approved",
+            "final_decision":    final_decision,
+            "overall_score":     overall_score,
+            "vendor":            input.vendor,
+            "project":           input.project,
+            "analyst":           input.analyst,
+            "excel_path":        excel_path,
+            "executive_summary": executive_summary,
+            "showstoppers":      analysis_dict.get("showstoppers", []),
+            "risks":             updated_risks,
+            "exceptions":        analysis_dict.get("exceptions", []),
+            "derogations":       analysis_dict.get("derogations", []),
             "global_score":      scoring.global_score,
             "low_score_count":   scoring.low_score_count,
             "showstopper_count": scoring.showstopper_count,
