@@ -2,8 +2,6 @@
 main.py
 =======
 FastAPI backend for TPRA ticket management.
-Launches workflows via subprocess (same as `make execute`) — guaranteed to work.
-Stores results in SQLite.
 """
 
 import asyncio
@@ -11,7 +9,6 @@ import base64
 import json
 import os
 import sqlite3
-import subprocess
 import uuid
 from datetime import datetime
 from pathlib import Path
@@ -26,10 +23,10 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 # ── Config ────────────────────────────────────────────────────────────────────
-WORKFLOW_DIR    = os.environ.get("WORKFLOW_DIR", str(Path.home() / "CMA_CGM/mistral/evaluation_risques"))
-WORKFLOW_NAME   = "tpra-evaluation"
-DB_PATH         = "tickets.db"
-UPLOAD_DIR      = Path("uploads")
+WORKFLOW_DIR  = os.environ.get("WORKFLOW_DIR", str(Path.home() / "CMA_CGM/mistral/evaluation_risques"))
+WORKFLOW_NAME = "tpra-evaluation"
+DB_PATH       = "tickets.db"
+UPLOAD_DIR    = Path("uploads")
 UPLOAD_DIR.mkdir(exist_ok=True)
 
 app = FastAPI(title="TPRA Ticket Manager", version="1.0.0")
@@ -46,22 +43,31 @@ def init_db():
     conn = get_db()
     conn.execute("""
         CREATE TABLE IF NOT EXISTS tickets (
-            id           TEXT PRIMARY KEY,
-            vendor       TEXT NOT NULL,
-            project      TEXT,
-            analyst      TEXT,
-            source_type  TEXT NOT NULL,
-            filename     TEXT,
-            file_path    TEXT,
-            status       TEXT DEFAULT 'pending',
-            execution_id TEXT,
-            result       TEXT,
-            excel_path   TEXT,
-            created_at   TEXT,
-            updated_at   TEXT
+            id             TEXT PRIMARY KEY,
+            vendor         TEXT NOT NULL,
+            project        TEXT,
+            analyst        TEXT,
+            source_type    TEXT NOT NULL,
+            filename       TEXT,
+            file_path      TEXT,
+            status         TEXT DEFAULT 'pending',
+            execution_id   TEXT,
+            result         TEXT,
+            excel_path     TEXT,
+            final_decision TEXT,
+            validated_by   TEXT,
+            created_at     TEXT,
+            updated_at     TEXT
         )
     """)
     conn.commit()
+    # Migration: add new columns if they don't exist in an existing DB
+    for col, typ in [("final_decision", "TEXT"), ("validated_by", "TEXT")]:
+        try:
+            conn.execute(f"ALTER TABLE tickets ADD COLUMN {col} {typ}")
+            conn.commit()
+        except Exception:
+            pass
     conn.close()
 
 init_db()
@@ -79,6 +85,7 @@ class TicketSummary(BaseModel):
     global_score: Optional[float] = None
     overall_score: Optional[str] = None
     final_decision: Optional[str] = None
+    validated_by: Optional[str] = None
     created_at: str
     updated_at: str
 
@@ -90,31 +97,57 @@ class TicketDetail(TicketSummary):
 class ValidateRequest(BaseModel):
     approved: bool
     comments: Optional[str] = ""
+    validated_by: Optional[str] = None   # nom de l'analyste humain
 
-# ── Background workflow runner ────────────────────────────────────────────────
+# ── Helpers ───────────────────────────────────────────────────────────────────
+
+def _update_status(ticket_id: str, status: str, extra: dict = None):
+    now = datetime.utcnow().isoformat()
+    conn = get_db()
+    if extra:
+        conn.execute("""
+            UPDATE tickets SET status=?, result=?, excel_path=?, updated_at=?
+            WHERE id=?
+        """, (status, json.dumps(extra.get("result")),
+              extra.get("excel_path"), now, ticket_id))
+    else:
+        conn.execute("UPDATE tickets SET status=?, updated_at=? WHERE id=?",
+                     (status, now, ticket_id))
+    conn.commit()
+    conn.close()
+
+def _row_to_summary(r, res=None) -> TicketSummary:
+    if res is None and r["result"]:
+        try:
+            res = json.loads(r["result"])
+        except Exception:
+            res = {}
+    res = res or {}
+    return TicketSummary(
+        id=r["id"], vendor=r["vendor"], project=r["project"],
+        analyst=r["analyst"], source_type=r["source_type"],
+        filename=r["filename"], status=r["status"],
+        global_score=res.get("global_score"),
+        overall_score=res.get("overall_score"),
+        final_decision=r["final_decision"] or res.get("final_decision"),
+        validated_by=r["validated_by"],
+        created_at=r["created_at"], updated_at=r["updated_at"],
+    )
+
+# ── Background workflow runner ─────────────────────────────────────────────────
 
 async def _run_workflow(ticket_id: str, vendor: str, project: str,
                         analyst: str, source_type: str, content: str):
-    """
-    Runs the workflow via subprocess — exactly like `make execute`.
-    Updates the DB with status + result when done.
-    """
     input_data = json.dumps({
-        "vendor":      vendor,
-        "project":     project,
-        "analyst":     analyst,
-        "source_type": source_type,
-        "content":     content,
+        "vendor": vendor, "project": project,
+        "analyst": analyst, "source_type": source_type, "content": content,
     })
-
     cmd = [
         "python", "-m", "entrypoints.start",
         f"--workflow={WORKFLOW_NAME}",
         f"--input={input_data}",
     ]
-
     print(f"🚀 Launching workflow for ticket {ticket_id[:8]}...")
-
     try:
         proc = await asyncio.create_subprocess_exec(
             *cmd,
@@ -123,25 +156,19 @@ async def _run_workflow(ticket_id: str, vendor: str, project: str,
             stderr=asyncio.subprocess.PIPE,
             env={**os.environ, "PYTHONPATH": f"{WORKFLOW_DIR}/src"},
         )
-
         stdout, stderr = await proc.communicate()
         output = stdout.decode("utf-8", errors="ignore")
-        err = stderr.decode("utf-8", errors="ignore")
-
+        err    = stderr.decode("utf-8", errors="ignore")
         print(f"📤 Workflow stdout: {output[:500]}")
         if err:
             print(f"⚠️  Workflow stderr: {err[:300]}")
 
-        # Parse result — format is "Result: {...json...}"
         result_dict = None
-        excel_path = None
-
+        excel_path  = None
         for line in output.splitlines():
             if line.startswith("Result:"):
                 raw = line[len("Result:"):].strip()
                 try:
-                    # Le SDK retourne {'result': '{"status":...}'} 
-                    # ou directement '{"status":...}'
                     outer = json.loads(raw.replace("'", '"'))
                     if isinstance(outer, dict) and "result" in outer:
                         inner = outer["result"]
@@ -150,7 +177,6 @@ async def _run_workflow(ticket_id: str, vendor: str, project: str,
                         result_dict = outer
                     excel_path = result_dict.get("excel_path")
                 except Exception:
-                    # Fallback — try ast.literal_eval for Python dict format
                     import ast
                     try:
                         outer = ast.literal_eval(raw)
@@ -168,58 +194,35 @@ async def _run_workflow(ticket_id: str, vendor: str, project: str,
         if result_dict and result_dict.get("status") in ("rejected_by_analyst",):
             status = "rejected"
 
+        # Pour une validation automatique par l'IA, on stocke "auto"
+        final_decision = (result_dict or {}).get("final_decision")
+        validated_by   = "auto"
+
     except Exception as e:
         print(f"❌ Workflow error: {e}")
-        result_dict = {"error": str(e)}
-        excel_path  = None
-        status      = "error"
+        result_dict    = {"error": str(e)}
+        excel_path     = None
+        status         = "error"
+        final_decision = None
+        validated_by   = None
 
     now = datetime.utcnow().isoformat()
     conn = get_db()
     conn.execute("""
         UPDATE tickets
-        SET status=?, result=?, excel_path=?, updated_at=?
+        SET status=?, result=?, excel_path=?, final_decision=?, validated_by=?, updated_at=?
         WHERE id=?
     """, (status, json.dumps(result_dict) if result_dict else None,
-          excel_path, now, ticket_id))
+          excel_path, final_decision, validated_by, now, ticket_id))
     conn.commit()
     conn.close()
-    print(f"✅ Ticket {ticket_id[:8]} → {status}")
+    print(f"✅ Ticket {ticket_id[:8]} → {status} | decision={final_decision} | by={validated_by}")
 
 
 async def _run_workflow_with_validation(ticket_id: str, vendor: str, project: str,
                                          analyst: str, source_type: str, content: str):
-    """
-    Runs workflow up to human validation, then waits for frontend signal.
-    Uses a two-phase approach:
-      Phase 1: run until waiting_validation, store partial result
-      Phase 2: frontend sends /validate → continue
-    Since the workflow handles validation internally via wait_for_input,
-    we just run it fully and poll for completion.
-    """
-    # Mark as running
     _update_status(ticket_id, "running")
-
-    # Run in background — workflow will pause internally for human validation
-    # The workflow's wait_for_input is handled by Mistral Studio
-    # Here we just run and wait for the full result
     await _run_workflow(ticket_id, vendor, project, analyst, source_type, content)
-
-
-def _update_status(ticket_id: str, status: str, extra: dict = None):
-    now = datetime.utcnow().isoformat()
-    conn = get_db()
-    if extra:
-        conn.execute("""
-            UPDATE tickets SET status=?, result=?, excel_path=?, updated_at=?
-            WHERE id=?
-        """, (status, json.dumps(extra.get("result")),
-              extra.get("excel_path"), now, ticket_id))
-    else:
-        conn.execute("UPDATE tickets SET status=?, updated_at=? WHERE id=?",
-                     (status, now, ticket_id))
-    conn.commit()
-    conn.close()
 
 # ── Routes ────────────────────────────────────────────────────────────────────
 
@@ -256,7 +259,6 @@ async def create_ticket(
     conn.commit()
     conn.close()
 
-    # Launch workflow in background — non-blocking
     background_tasks.add_task(
         _run_workflow_with_validation,
         ticket_id, vendor, project, analyst, source_type, content
@@ -278,23 +280,7 @@ async def list_tickets(status: Optional[str] = None):
         (status,) if status else ()
     ).fetchall()
     conn.close()
-
-    result = []
-    for r in rows:
-        res = None
-        if r["result"]:
-            try: res = json.loads(r["result"])
-            except: pass
-        result.append(TicketSummary(
-            id=r["id"], vendor=r["vendor"], project=r["project"],
-            analyst=r["analyst"], source_type=r["source_type"],
-            filename=r["filename"], status=r["status"],
-            global_score=res.get("global_score") if res else None,
-            overall_score=res.get("overall_score") if res else None,
-            final_decision=res.get("final_decision") if res else None,
-            created_at=r["created_at"], updated_at=r["updated_at"],
-        ))
-    return result
+    return [_row_to_summary(r) for r in rows]
 
 
 @app.get("/tickets/{ticket_id}", response_model=TicketDetail)
@@ -307,8 +293,10 @@ async def get_ticket(ticket_id: str):
 
     result = None
     if row["result"]:
-        try: result = json.loads(row["result"])
-        except: pass
+        try:
+            result = json.loads(row["result"])
+        except Exception:
+            pass
 
     res = result or {}
     return TicketDetail(
@@ -318,10 +306,54 @@ async def get_ticket(ticket_id: str):
         execution_id=row["execution_id"],
         global_score=res.get("global_score"),
         overall_score=res.get("overall_score"),
-        final_decision=res.get("final_decision"),
+        final_decision=row["final_decision"] or res.get("final_decision"),
+        validated_by=row["validated_by"],
         result=result, excel_path=row["excel_path"],
         created_at=row["created_at"], updated_at=row["updated_at"],
     )
+
+
+@app.post("/tickets/{ticket_id}/validate", response_model=TicketSummary)
+async def validate_ticket(ticket_id: str, req: ValidateRequest):
+    """
+    Validation manuelle par un analyste humain.
+    - approved=True  → final_decision="Approved", validated_by=nom_analyste
+    - approved=False → final_decision="Rejected", validated_by=nom_analyste
+    """
+    conn = get_db()
+    row = conn.execute("SELECT * FROM tickets WHERE id=?", (ticket_id,)).fetchone()
+    if not row:
+        conn.close()
+        raise HTTPException(404, "Ticket not found")
+
+    final_decision = "Approved" if req.approved else "Rejected"
+    validated_by   = req.validated_by or row["analyst"] or "Analyste"
+    status         = "completed" if req.approved else "rejected"
+    now            = datetime.utcnow().isoformat()
+
+    # Mettre à jour le result JSON aussi pour cohérence
+    result = None
+    if row["result"]:
+        try:
+            result = json.loads(row["result"])
+        except Exception:
+            result = {}
+    result = result or {}
+    result["final_decision"]  = final_decision
+    result["validated_by"]    = validated_by
+    result["analyst_comments"] = req.comments or ""
+
+    conn.execute("""
+        UPDATE tickets
+        SET status=?, final_decision=?, validated_by=?, result=?, updated_at=?
+        WHERE id=?
+    """, (status, final_decision, validated_by, json.dumps(result), now, ticket_id))
+    conn.commit()
+
+    row = conn.execute("SELECT * FROM tickets WHERE id=?", (ticket_id,)).fetchone()
+    conn.close()
+
+    return _row_to_summary(row, result)
 
 
 @app.get("/tickets/{ticket_id}/download")
@@ -341,6 +373,20 @@ async def download_excel(ticket_id: str):
         filename=f"TPRA_{row['vendor']}_{ticket_id[:8]}.xlsx",
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     )
+
+
+@app.delete("/tickets/{ticket_id}")
+async def delete_ticket(ticket_id: str):
+    """Supprime un ticket (admin uniquement)."""
+    conn = get_db()
+    row = conn.execute("SELECT * FROM tickets WHERE id=?", (ticket_id,)).fetchone()
+    if not row:
+        conn.close()
+        raise HTTPException(404, "Ticket not found")
+    conn.execute("DELETE FROM tickets WHERE id=?", (ticket_id,))
+    conn.commit()
+    conn.close()
+    return {"deleted": ticket_id}
 
 
 @app.get("/health")

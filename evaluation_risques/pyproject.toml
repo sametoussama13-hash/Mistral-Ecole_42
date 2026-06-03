@@ -13,6 +13,12 @@ dependencies = [
     "pandas",
     "numpy",
     "openpyxl",
+    "fastapi",
+    "uvicorn",
+    "python-multipart",
+    "httpx",
+    "pydantic",
+    "python-dotenv",
 ]
 
 [dependency-groups]
