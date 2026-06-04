@@ -44,8 +44,14 @@ def fallback_parse(text: str) -> list[dict]:
 
 
 def score_to_level(avg: float) -> str:
-    """Converts average score (1-4) to risk level."""
-    if avg <= 1.5: return "Critical"
-    if avg <= 2.5: return "High"
-    if avg <= 3.5: return "Medium"
-    return "Low"
+    """
+    Converts average score (1-4) to risk level.
+    Called only when there are NO low scores (all related scores >= 3).
+    In that case the only possible levels are 'Low' or 'Modéré'.
+      - avg >= 3.5  → Low
+      - 3.0 <= avg < 3.5 → Modéré
+    """
+    if avg >= 3.5:
+        return "Low"
+    return "Modéré"
+

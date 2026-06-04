@@ -1,9 +1,106 @@
-.venv/
-__pycache__/
-*.pyc
+# =============================================================================
+#  .gitignore — Mistral-Ecole_42  (racine)
+# =============================================================================
+
+# ---------------------------------------------------------------------------
+# Variables d'environnement — JAMAIS versionnées
+# ---------------------------------------------------------------------------
 .env
-dist/
-build/
-*.egg-info/
+Back/.env
+.env.*
+!.env.example          # garder le template d'exemple si présent
+
+# ---------------------------------------------------------------------------
+# Environnements virtuels Python
+# ---------------------------------------------------------------------------
+.venv/
+venv/
+env/
+__pypackages__/
+
+# ---------------------------------------------------------------------------
+# Caches Python
+# ---------------------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyo
 .mypy_cache/
 .ruff_cache/
+.pytest_cache/
+.hypothesis/
+*.egg-info/
+dist/
+build/
+*.egg
+pip-wheel-metadata/
+
+# ---------------------------------------------------------------------------
+# uv
+# ---------------------------------------------------------------------------
+uv.lock          # décommenter si vous ne voulez PAS versionner le lockfile
+                 # (en général on le conserve — laissez cette ligne commentée)
+# uv.lock
+
+# ---------------------------------------------------------------------------
+# Fichiers de données / uploads temporaires
+# ---------------------------------------------------------------------------
+Back/uploads/
+uploads/
+*.xlsx
+*.pdf
+# Si vous voulez versionner des exemples, retirez les lignes ci-dessus
+# et ajoutez des exceptions : !docs/exemple.pdf
+
+# ---------------------------------------------------------------------------
+# Base de données locale
+# ---------------------------------------------------------------------------
+*.db
+*.sqlite
+*.sqlite3
+
+# ---------------------------------------------------------------------------
+# Logs
+# ---------------------------------------------------------------------------
+.logs/
+*.log
+*.log.*
+
+# ---------------------------------------------------------------------------
+# Frontend — Node
+# ---------------------------------------------------------------------------
+front/node_modules/
+front/dist/
+front/.next/
+front/build/
+front/.vite/
+front/.cache/
+*.tsbuildinfo
+
+# ---------------------------------------------------------------------------
+# Éditeurs & OS
+# ---------------------------------------------------------------------------
+.vscode/settings.json
+.vscode/*.code-workspace
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# ---------------------------------------------------------------------------
+# Lock files de gestionnaire de paquets système (garder uv.lock, npm ci)
+# ---------------------------------------------------------------------------
+# package-lock.json  ← NE PAS ignorer, il garantit la reproductibilité npm
+
+# ---------------------------------------------------------------------------
+# Fichiers de build / déploiement
+# ---------------------------------------------------------------------------
+*.pyc
+*.pyd
+*.so
+*.dylib
+.coverage
+htmlcov/
+coverage.xml
