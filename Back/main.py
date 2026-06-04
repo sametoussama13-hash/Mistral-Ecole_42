@@ -23,7 +23,8 @@ from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
 
 # ── Config ────────────────────────────────────────────────────────────────────
-WORKFLOW_DIR  = os.environ.get("WORKFLOW_DIR", str(Path.home() / "CMA_CGM/mistral/evaluation_risques"))
+WORKFLOW_DIR  = os.environ.get("WORKFLOW_DIR", "/home/samet/42_common/CMA_CGM/mistral/evaluation_risques")
+VENV_PYTHON   = f"{WORKFLOW_DIR}/.venv/bin/python"
 WORKFLOW_NAME = "tpra-evaluation"
 DB_PATH       = "tickets.db"
 UPLOAD_DIR    = Path("uploads")
@@ -151,30 +152,33 @@ def _row_to_summary(r, res=None) -> TicketSummary:
 
 async def _run_workflow(ticket_id: str, vendor: str, project: str,
                         analyst: str, source_type: str, content: str):
+    import ast
+    import shlex
+
     input_data = json.dumps({
         "vendor": vendor, "project": project,
         "analyst": analyst, "source_type": source_type, "content": content,
     })
-    cmd = [
-        "python", "-m", "entrypoints.start",
-        f"--workflow={WORKFLOW_NAME}",
-        f"--input={input_data}",
-    ]
+
+    # Use make execute exactly like the command line — shell handles uv + venv
+    safe_input = input_data.replace("'", "'\''")  # escape single quotes
+    cmd = cmd = f"cd '{WORKFLOW_DIR}' && make execute workflow={WORKFLOW_NAME} input='{safe_input}'"
+
     print(f"🚀 Launching workflow for ticket {ticket_id[:8]}...")
+    print(f"   CMD: {cmd[:150]}...")
+
     try:
-        proc = await asyncio.create_subprocess_exec(
-            *cmd,
-            cwd=f"{WORKFLOW_DIR}/src",
+        proc = await asyncio.create_subprocess_shell(
+            cmd,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
-            env={**os.environ, "PYTHONPATH": f"{WORKFLOW_DIR}/src"},
         )
         stdout, stderr = await proc.communicate()
         output = stdout.decode("utf-8", errors="ignore")
         err    = stderr.decode("utf-8", errors="ignore")
-        print(f"📤 Workflow stdout: {output[:500]}")
+        print(f"📤 stdout: {output[:800]}")
         if err:
-            print(f"⚠️  Workflow stderr: {err[:300]}")
+            print(f"⚠️  stderr: {err[:400]}")
 
         result_dict = None
         excel_path  = None
@@ -182,33 +186,23 @@ async def _run_workflow(ticket_id: str, vendor: str, project: str,
             if line.startswith("Result:"):
                 raw = line[len("Result:"):].strip()
                 try:
-                    outer = json.loads(raw.replace("'", '"'))
+                    outer = ast.literal_eval(raw)
                     if isinstance(outer, dict) and "result" in outer:
                         inner = outer["result"]
                         result_dict = json.loads(inner) if isinstance(inner, str) else inner
                     else:
                         result_dict = outer
-                    excel_path = result_dict.get("excel_path")
-                except Exception:
-                    import ast
-                    try:
-                        outer = ast.literal_eval(raw)
-                        if isinstance(outer, dict) and "result" in outer:
-                            inner = outer["result"]
-                            result_dict = json.loads(inner) if isinstance(inner, str) else inner
-                        else:
-                            result_dict = outer
-                        excel_path = result_dict.get("excel_path")
-                    except Exception:
-                        result_dict = {"raw": raw}
+                    excel_path = result_dict.get("excel_path") if isinstance(result_dict, dict) else None
+                except Exception as parse_err:
+                    print(f"⚠️  Parse error: {parse_err} | raw={raw[:100]}")
+                    result_dict = {"raw": raw}
                 break
 
-        status = "completed" if result_dict else "error"
-        if result_dict and result_dict.get("status") in ("rejected_by_analyst",):
+        status = "completed" if result_dict and "error" not in result_dict else "error"
+        if isinstance(result_dict, dict) and result_dict.get("status") == "rejected_by_analyst":
             status = "rejected"
 
-        # Pour une validation automatique par l'IA, on stocke "auto"
-        final_decision = (result_dict or {}).get("final_decision")
+        final_decision = (result_dict or {}).get("final_decision") if isinstance(result_dict, dict) else None
         validated_by   = "auto"
 
     except Exception as e:
@@ -229,7 +223,7 @@ async def _run_workflow(ticket_id: str, vendor: str, project: str,
           excel_path, final_decision, validated_by, now, ticket_id))
     conn.commit()
     conn.close()
-    print(f"✅ Ticket {ticket_id[:8]} → {status} | decision={final_decision} | by={validated_by}")
+    print(f"✅ Ticket {ticket_id[:8]} → {status} | decision={final_decision}")
 
 
 async def _run_workflow_with_validation(ticket_id: str, vendor: str, project: str,

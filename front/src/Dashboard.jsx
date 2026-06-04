@@ -1033,8 +1033,17 @@ function QuestionList({ questions }) {
 //   "validate"   — ticket reached waiting_validation → show results + Approve/Reject
 //   "done"       — completed (auto-approved) or rejected → show summary, close button
 function LiveTrackingModal({ ticketId, onClose, onRefreshList }) {
+  const [minimized, setMinimized] = useState(false);
   const [ticket, setTicket]   = useState(null);
   const [phase, setPhase]     = useState("tracking");
+
+  // Compute steps (safe - uses ticket which may be null)
+  const steps = (() => {
+    if (ticket?.workflow_steps) return ticket.workflow_steps;
+    const order = ["extract_text","analyze_risks","score_responses","generate_text_report","export_excel"];
+    const doneCount = { running:1, waiting_validation:3, completed:5, rejected:3, error:1 }[ticket?.status] ?? 0;
+    return order.map((key,i) => ({ key, status: i<doneCount?"done":i===doneCount&&["running","error"].includes(ticket?.status)?(ticket?.status==="error"?"error":"running"):"pending" }));
+  })();
   const [comments, setComments] = useState("");
   const [sending, setSending]   = useState(false);
   const [tab, setTab]           = useState("overview");
@@ -1238,6 +1247,40 @@ function LiveTrackingModal({ ticketId, onClose, onRefreshList }) {
     );
   }
 
+  // ── Minimized floating badge ───────────────────────────────────────────────
+  if (minimized) {
+    const stepsDone = steps.filter(s => s.status === "done").length;
+    const isRunning = phase === "tracking";
+    const needsAction = phase === "validate";
+    return (
+      <div onClick={() => setMinimized(false)}
+        style={{ position:"fixed", bottom:24, right:24, zIndex:500,
+          display:"flex", alignItems:"center", gap:10,
+          padding:"10px 16px", borderRadius:14, cursor:"pointer",
+          background: needsAction ? "#FFFBEB" : "#0d1e3a",
+          border: needsAction ? "1px solid rgba(249,115,22,0.4)" : "1px solid rgba(58,95,191,0.4)",
+          boxShadow:"0 8px 24px rgba(0,0,0,0.25)",
+          transition:"all 0.2s" }}>
+        {/* Animated dot */}
+        <span style={{ width:8, height:8, borderRadius:"50%", flexShrink:0,
+          background: needsAction ? "#F97316" : "#3A5FBF",
+          animation: isRunning||needsAction ? "blink 1.4s infinite" : "none",
+          boxShadow: isRunning ? "0 0 8px #3A5FBF" : needsAction ? "0 0 8px #F97316" : "none" }} />
+        <div>
+          <div style={{ fontSize:12, fontWeight:700, color: needsAction?"#92400E":"#fff", lineHeight:1.2 }}>
+            {ticket?.vendor || "Ticket"}
+          </div>
+          <div style={{ fontSize:10, color: needsAction?"#D97706":"rgba(255,255,255,0.55)", marginTop:1 }}>
+            {needsAction ? "⚠ Validation requise" : isRunning ? `Étape ${stepsDone}/5 en cours…` : "Terminé"}
+          </div>
+        </div>
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={needsAction?"#D97706":"rgba(255,255,255,0.5)"} strokeWidth="2.5" strokeLinecap="round">
+          <polyline points="18 15 12 9 6 15"/>
+        </svg>
+      </div>
+    );
+  }
+
   return (
     <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.2)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:1000 }}>
       <div style={{ background:"#fff", borderRadius:16, padding:32, width:720, maxHeight:"92vh", overflowY:"auto", boxShadow:"0 20px 60px rgba(0,0,0,0.1)", border:"1px solid #E5E7EB" }}>
@@ -1259,6 +1302,12 @@ function LiveTrackingModal({ ticketId, onClose, onRefreshList }) {
           {phase !== "tracking" && (
             <button onClick={onClose} style={{ background:"none", border:"none", color:"#9CA3AF", fontSize:18, cursor:"pointer", flexShrink:0 }}>✕</button>
           )}
+          {/* Minimize button always visible */}
+          <button onClick={() => setMinimized(true)} title="Réduire — continuer en arrière-plan"
+            style={{ background:"none", border:"1px solid #E5E7EB", borderRadius:7, color:"#9CA3AF", cursor:"pointer", flexShrink:0, padding:"4px 8px", fontSize:11, display:"flex", alignItems:"center", gap:4 }}>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><polyline points="6 9 12 15 18 9"/></svg>
+            Réduire
+          </button>
         </div>
 
         {/* ── Phase: TRACKING ── */}
@@ -1657,9 +1706,9 @@ function DetailModal({ ticket: initialTicket, onClose, onDone, dark=true }) {
   const pjTotal   = (result.question_scores||[]).filter(q=>q.piece_jointe).length;
   const pjDone    = Object.values(attachments).flat().length;
   const tabs = [
-    { key:"overview",     label:"Résumé" },
-    ...(result.question_scores?.length > 0 ? [{ key:"questions",    label:`Questions (${result.question_scores.length})` }] : []),
-    ...(result.risks?.length > 0           ? [{ key:"risks",        label:`Risques (${result.risks.length})` }] : []),
+    { key:"overview",     label: D.text ? (dark?"Résumé":"Résumé") : "Résumé" },
+    ...(result.question_scores?.length > 0 ? [{ key:"questions",    label:`${("Questions")} (${result.question_scores.length})` }] : []),
+    ...(result.risks?.length > 0           ? [{ key:"risks",        label:`${"Risques"} (${result.risks.length})` }] : []),
     ...(ssCount > 0                        ? [{ key:"showstoppers", label:`Showstoppers (${ssCount})`, red:true }] : []),
     ...(result.question_scores?.length > 0 ? [{ key:"attachments",  label: pjTotal > 0 ? `Pièces jointes (${pjDone}/${pjTotal})` : "Pièces jointes", yellow: true }] : []),
   ];
