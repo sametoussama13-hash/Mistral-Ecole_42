@@ -838,14 +838,16 @@ function LoginScreen({ onLogin, tr, lang, changeLang, isRtl }) {
 
 
 
-const STATUS = {
-  pending:             { label: "En attente",  color: "#6B7280", bg: "#F3F4F6", dot: "#9CA3AF" },
-  running:             { label: "En cours",    color: "#3A5FBF", bg: "#EEF1F8", dot: "#3A5FBF" },
-  waiting_validation:  { label: "À valider",   color: "#D97706", bg: "#FFFBEB", dot: "#F59E0B" },
-  completed:           { label: "Terminé",     color: "#059669", bg: "#ECFDF5", dot: "#10B981" },
-  rejected:            { label: "Rejeté",      color: "#E30613", bg: "#FFF0F0", dot: "#E8404C" },
-  error:               { label: "Erreur",      color: "#E30613", bg: "#FFF0F0", dot: "#E8404C" },
-};
+function getStatus(tr) { return {
+  pending:             { label: tr?.filter_pending||"En attente",  color: "#6B7280", bg: "#F3F4F6", dot: "#9CA3AF" },
+  running:             { label: tr?.kpi_running||"En cours",       color: "#3A5FBF", bg: "#EEF1F8", dot: "#3A5FBF" },
+  waiting_validation:  { label: tr?.filter_validate||"À valider",  color: "#D97706", bg: "#FFFBEB", dot: "#F59E0B" },
+  completed:           { label: "Terminé",                         color: "#059669", bg: "#ECFDF5", dot: "#10B981" },
+  rejected:            { label: tr?.rejected||"Rejeté",            color: "#E30613", bg: "#FFF0F0", dot: "#E8404C" },
+  error:               { label: "Erreur",                          color: "#E30613", bg: "#FFF0F0", dot: "#E8404C" },
+};}
+// Default STATUS for components without tr
+const STATUS = getStatus(null);
 
 const RISK_COLORS  = { Critical: "#E30613", High: "#EA580C", Medium: "#D97706", Low: "#16A34A" };
 const SCORE_COLORS = { 1: "#E30613", 2: "#EA580C", 3: "#D97706", 4: "#16A34A" };
@@ -854,7 +856,7 @@ const SCORE_LABELS = { 1: "Non-conforme", 2: "Partiel", 3: "Conforme", 4: "Matur
 
 function fmtDate(iso) {
   if (!iso) return "—";
-  return new Date(iso).toLocaleString("fr-FR", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
+  return new Date(iso).toLocaleString("fr-FR", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", timeZone: "Europe/Paris" });
 }
 function fmtDuration(ms) {
   if (ms == null) return null;
@@ -863,8 +865,9 @@ function fmtDuration(ms) {
   return `${Math.floor(ms / 60000)} min ${Math.round((ms % 60000) / 1000)} s`;
 }
 
-function StatusBadge({ status }) {
-  const s = STATUS[status] || STATUS.pending;
+function StatusBadge({ status, tr:trProp }) {
+  const statusMap = trProp ? getStatus(trProp) : STATUS;
+  const s = statusMap[status] || statusMap.pending;
   return (
     <span style={{ display:"inline-flex", alignItems:"center", gap:5, padding:"3px 10px", borderRadius:20,
       background:`${s.color}18`, color:s.color, fontSize:11, fontWeight:600, border:`1px solid ${s.color}44` }}>
@@ -2255,7 +2258,7 @@ function DetailModal({ ticket: initialTicket, onClose, onDone, dark=true }) {
                         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={hasPJ?"#34D399":D.muted} strokeWidth="2" strokeLinecap="round"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="13 2 13 9 20 9"/></svg>
                         <span style={{ flex:1, fontSize:11, color:hasPJ?"#34D399":D.muted, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{att.filename}</span>
                         <span style={{ fontSize:10, color:D.faint }}>
-                          {new Date(att.uploaded_at).toLocaleDateString("fr-FR",{day:"2-digit",month:"short"})}
+                          {new Date(att.uploaded_at).toLocaleDateString("fr-FR",{day:"2-digit",month:"short",timeZone:"Europe/Paris"})}
                         </span>
                         <button onClick={()=>window.open(`${API}/tickets/${initialTicket.id}/attachments/${att.id}/download`,"_blank")}
                           style={{ background:"none", border:"none", color:hasPJ?"#34D399":D.muted, cursor:"pointer", padding:"2px 5px", borderRadius:4, display:"flex", alignItems:"center" }}>
@@ -2348,10 +2351,22 @@ function DetailModal({ ticket: initialTicket, onClose, onDone, dark=true }) {
                   </span>
                 )}
               </div>
-              <div style={{ display:"flex", gap:6, alignItems:"center", color:D.faint, fontSize:12 }}>
+              <div style={{ display:"flex", gap:6, alignItems:"center", color:D.faint, fontSize:12, flexWrap:"wrap" }}>
                 {ticket.project && <span>{ticket.project}</span>}
                 {ticket.analyst && <><span>·</span><span>{ticket.analyst}</span></>}
                 {ticket.created_at && <><span>·</span><span>{fmtDate(ticket.created_at)}</span></>}
+                {ticket.filename && (
+                  <><span>·</span>
+                  <span style={{ display:"inline-flex", alignItems:"center", gap:4, padding:"1px 7px", borderRadius:5,
+                    background: dark ? "rgba(255,255,255,0.06)" : "rgba(18,33,75,0.06)",
+                    border: dark ? "1px solid rgba(255,255,255,0.1)" : "1px solid rgba(18,33,75,0.15)",
+                    color: dark ? "rgba(255,255,255,0.6)" : "#12214B", fontSize:11 }}>
+                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                      <path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="13 2 13 9 20 9"/>
+                    </svg>
+                    {ticket.filename}
+                  </span></>
+                )}
               </div>
             </div>
             <div style={{ display:"flex", gap:8, alignItems:"center", flexShrink:0 }}>
@@ -2461,7 +2476,7 @@ function DetailModal({ ticket: initialTicket, onClose, onDone, dark=true }) {
   );
 }
 
-function TicketRow({ ticket, onSelect, adminMode: isAdmin, checked, onCheck, dark=true, T={text:"#fff",textMuted:"rgba(255,255,255,0.55)",textFaint:"rgba(255,255,255,0.3)",tableBorder:"rgba(255,255,255,0.05)",rowChecked:"rgba(227,6,19,0.08)",badgeBg:"rgba(255,255,255,0.05)",badgeBorder:"rgba(255,255,255,0.1)",badgeText:"rgba(255,255,255,0.65)"} }) {
+function TicketRow({ ticket, onSelect, adminMode: isAdmin, checked, onCheck, dark=true, tr:trRow, T={text:"#fff",textMuted:"rgba(255,255,255,0.55)",textFaint:"rgba(255,255,255,0.3)",tableBorder:"rgba(255,255,255,0.05)",rowChecked:"rgba(227,6,19,0.08)",badgeBg:"rgba(255,255,255,0.05)",badgeBorder:"rgba(255,255,255,0.1)",badgeText:"rgba(255,255,255,0.65)"} }) {
   const activeStep = ticket.workflow_steps?.find(s => s.status === "running")?.key;
   const decision   = ticket.final_decision || ticket.result?.final_decision;
   const isApproved = decision === "Approved";
@@ -2532,7 +2547,7 @@ function TicketRow({ ticket, onSelect, adminMode: isAdmin, checked, onCheck, dar
             ) : (
               <span style={{ width:6, height:6, borderRadius:"50%", background:"rgba(255,255,255,0.2)", display:"inline-block" }} />
             )}
-            {isApproved ? "Approuvé" : isRejected ? "Rejeté" : "—"}
+            {isApproved ? (trRow?.approved||"Approuvé") : isRejected ? (trRow?.rejected||"Rejeté") : "—"}
           </div>
         ) : (
           <span style={{ color:"rgba(255,255,255,0.2)", fontSize:12 }}>—</span>
@@ -2541,7 +2556,7 @@ function TicketRow({ ticket, onSelect, adminMode: isAdmin, checked, onCheck, dar
 
       {/* Statut */}
       <td style={{ padding:"14px 18px" }}>
-        <StatusBadge status={ticket.status} />
+        <StatusBadge status={ticket.status} tr={trRow} />
         {ticket.status === "running" && activeStep && (
           <div style={{ marginTop:4, fontSize:10, color:"rgba(122,150,212,0.7)", fontFamily:"'DM Mono',monospace", letterSpacing:"0.02em" }}>
             › {activeStep}
@@ -2594,7 +2609,7 @@ function TicketRow({ ticket, onSelect, adminMode: isAdmin, checked, onCheck, dar
 }
 
 // ── Confirm Delete Modal ──────────────────────────────────────────────────────
-function ConfirmDeleteModal({ count, onConfirm, onCancel }) {
+function ConfirmDeleteModal({ count, onConfirm, onCancel, tr:trDel }) {
   return (
     <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.25)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:2000 }}>
       <div style={{ background:"#fff", borderRadius:14, padding:28, width:380, boxShadow:"0 20px 60px rgba(0,0,0,0.12)", border:"1px solid #E5E7EB" }}>
@@ -2773,7 +2788,7 @@ function DashboardApp({ currentUser, onLogout, tr, lang, changeLang, isRtl }) {
         `tbody tr { animation:fadeUp 0.18s ease; }`,
         `input[type=checkbox] { width:14px;height:14px;cursor:pointer;accent-color:#E30613; }`,
         `.kpi-card:nth-child(1){animation:kpiIn 0.4s ease both}.kpi-card:nth-child(2){animation:kpiIn 0.5s ease both}.kpi-card:nth-child(3){animation:kpiIn 0.6s ease both}.kpi-card:nth-child(4){animation:kpiIn 0.7s ease both}.kpi-card:nth-child(5){animation:kpiIn 0.8s ease both}`,
-        `.filter-tab:hover{background:rgba(255,255,255,0.08)!important;color:rgba(255,255,255,0.8)!important}`,
+        `.filter-tab:hover{background:${dark?"rgba(255,255,255,0.08)":"rgba(18,33,75,0.07)"}!important;color:${dark?"rgba(255,255,255,0.8)":"#12214B"}!important}`,
         `.trow:hover td{background:${dark?'rgba(58,95,191,0.06)':'rgba(18,33,75,0.03)'}!important}`,
         `.action-btn:hover{opacity:0.85}`,
         `.ticket-action:hover{opacity:1!important;transform:translateY(-1px)}`,
@@ -2836,14 +2851,14 @@ function DashboardApp({ currentUser, onLogout, tr, lang, changeLang, isRtl }) {
         {/* ── Page title + date ── */}
         <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-end", marginBottom:28 }}>
           <div>
-            <div style={{ fontSize:11, color:T.textFaint, fontWeight:600, letterSpacing:"0.1em", marginBottom:4 }}>TABLEAU DE BORD</div>
+            <div style={{ fontSize:11, color:T.textFaint, fontWeight:600, letterSpacing:"0.1em", marginBottom:4 }}>{tr.dashboard}</div>
             <div style={{ fontSize:26, fontWeight:700, color:T.text, letterSpacing:"-0.02em" }}>
               Bonjour, <span style={{ color:"#E30613" }}>{currentUser.name.split(" ")[0]}</span>
             </div>
           </div>
           <div style={{ display:"flex", alignItems:"center", gap:8, padding:"8px 16px", borderRadius:10, background:T.surface, border:`1px solid ${T.border}`, color:T.textMuted, fontSize:12 }}>
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-            {new Date().toLocaleDateString("fr-FR",{day:"2-digit",month:"long",year:"numeric"})}
+            {new Date().toLocaleDateString("fr-FR",{day:"2-digit",month:"long",year:"numeric",timeZone:"Europe/Paris"})}
           </div>
         </div>
 
@@ -2880,10 +2895,10 @@ function DashboardApp({ currentUser, onLogout, tr, lang, changeLang, isRtl }) {
             <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:14 }}>
               <div style={{ display:"flex", alignItems:"center", gap:10 }}>
                 <div style={{ width:4, height:20, borderRadius:2, background:"#F97316" }} />
-                <span style={{ fontSize:15, fontWeight:700, color:T.text }}>À valider</span>
+                <span style={{ fontSize:15, fontWeight:700, color:T.text }}>{tr.filter_validate}</span>
                 <span style={{ padding:"2px 8px", borderRadius:20, background:"rgba(249,115,22,0.15)", color:"#F97316", fontSize:11, fontWeight:700 }}>{counts.waiting_validation}</span>
               </div>
-              <button onClick={()=>setFilter("waiting_validation")} style={{ background:"none", border:"none", color:"#F97316", fontSize:12, fontWeight:600, cursor:"pointer" }}>Voir tout →</button>
+              <button onClick={()=>setFilter("waiting_validation")} style={{ background:"none", border:"none", color:"#F97316", fontSize:12, fontWeight:600, cursor:"pointer" }}>{tr.see_all}</button>
             </div>
             <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(300px,1fr))", gap:10 }}>
               {tickets.filter(t=>t.status==="waiting_validation").slice(0,3).map(t=>(
@@ -2913,7 +2928,7 @@ function DashboardApp({ currentUser, onLogout, tr, lang, changeLang, isRtl }) {
         <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:14 }}>
           <div style={{ display:"flex", alignItems:"center", gap:10 }}>
             <div style={{ width:4, height:20, borderRadius:2, background:"#E30613" }} />
-            <span style={{ fontSize:15, fontWeight:700, color:T.text }}>Tous les tickets</span>
+            <span style={{ fontSize:15, fontWeight:700, color:T.text }}>{tr.filter_all} {tr.kpi_many}</span>
             <span style={{ padding:"2px 8px", borderRadius:20, background:"rgba(227,6,19,0.12)", color:"#E30613", fontSize:11, fontWeight:700 }}>{filteredTickets.length}</span>
           </div>
           {/* Filters inline */}
@@ -2990,7 +3005,7 @@ function DashboardApp({ currentUser, onLogout, tr, lang, changeLang, isRtl }) {
                     adminMode={isAdmin}
                     checked={checkedIds.has(t.id)}
                     onCheck={e=>toggleCheck(t.id,e)}
-                    dark={dark} T={T}
+                    dark={dark} T={T} tr={tr}
                   />
                 ))}
               </tbody>
@@ -3008,7 +3023,7 @@ function DashboardApp({ currentUser, onLogout, tr, lang, changeLang, isRtl }) {
       {showUpload   && <UploadModal onClose={()=>setShowUpload(false)} onLaunched={id=>{ setShowUpload(false); setTrackingId(id); setLastRefresh(Date.now()); }} />}
       {trackingId   && <LiveTrackingModal ticketId={trackingId} dark={dark} onClose={()=>{ setTrackingId(null); setLastRefresh(Date.now()); }} onRefreshList={()=>setLastRefresh(Date.now())} />}
       {selected     && <DetailModal ticket={selected} onClose={()=>setSelected(null)} onDone={()=>{ setSelected(null); setLastRefresh(Date.now()); }} dark={dark} />}
-      {confirmDelete && <ConfirmDeleteModal count={checkedIds.size} onConfirm={deleteSelected} onCancel={()=>setConfirmDelete(false)} />}
+      {confirmDelete && <ConfirmDeleteModal count={checkedIds.size} onConfirm={deleteSelected} onCancel={()=>setConfirmDelete(false)} tr={tr} />}
     </div>
   );
 }

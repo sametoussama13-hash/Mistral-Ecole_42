@@ -212,12 +212,25 @@ async def score_responses(text: str, vendor: str, analysis: dict) -> ScoringResu
     for risk in risks:
         related_ids    = risk.get("related_question_ids", [])
         related_scores = [scores_by_id[qid] for qid in related_ids if qid in scores_by_id]
-        avg = (
-            sum(related_scores) / len(related_scores)
-            if related_scores
-            else (sum(scores_by_id.values()) / len(scores_by_id) if scores_by_id else 2.0)
-        )
-        risk["level"] = score_to_level(avg)
+
+        if not related_scores:
+            # Fallback : moyenne globale de toutes les questions
+            related_scores = list(scores_by_id.values()) if scores_by_id else [2.0]
+
+        low_count = sum(1 for s in related_scores if s <= 2)
+
+        if low_count > 5:
+            # Plus de 5 notes basses → Critical
+            level = "Critical"
+        elif low_count >= 1:
+            # 1 à 5 notes basses → High
+            level = "High"
+        else:
+            # Aucune note basse : niveau selon la moyenne
+            avg = sum(related_scores) / len(related_scores)
+            level = score_to_level(avg)
+
+        risk["level"] = level
 
     # Décision finale
     level_order = {"Critical": 4, "High": 3, "Medium": 2, "Low": 1}

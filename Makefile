@@ -1,79 +1,101 @@
-.PHONY: install install-back install-eval install-front \
-        run run-back run-eval run-front \
-        stop help
+# =============================================================================
+#  Makefile — Mistral-Ecole_42  (racine du projet)
+#  Usage : make          → lance tout (back + workflows + front)
+#          make back     → backend seul
+#          make workflows→ worker Mistral seul
+#          make front    → frontend seul
+#          make stop     → arrête tous les processus lancés en arrière-plan
+#          make install  → installe les dépendances des trois couches
+# =============================================================================
 
-# ── Couleurs ────────────────────────────────────────────────────────────────
-CYAN  := \033[1;36m
-GREEN := \033[1;32m
-RESET := \033[0m
+.DEFAULT_GOAL := dev
 
-# ── Chemins ─────────────────────────────────────────────────────────────────
-BACK_DIR  := Back
-EVAL_DIR  := evaluation_risques
-FRONT_DIR := front
+# ---------------------------------------------------------------------------
+# Chemins
+# ---------------------------------------------------------------------------
+BACK_DIR        := Back
+WORKFLOWS_DIR   := evaluation_risques
+FRONT_DIR       := front
 
-# ============================================================================
-# INSTALL
-# ============================================================================
+# Fichiers de log (redirigés pour ne pas polluer le terminal principal)
+LOG_BACK        := .logs/back.log
+LOG_WORKFLOWS   := .logs/workflows.log
+LOG_FRONT       := .logs/front.log
 
-## Installe les dépendances des trois projets
-install: install-back install-eval install-front
-	@echo "$(GREEN)✔  Tous les projets sont installés.$(RESET)"
+# ---------------------------------------------------------------------------
+# Cibles principales
+# ---------------------------------------------------------------------------
 
-## Backend (FastAPI) — pip
+.PHONY: dev back workflows front stop install logs clean
+
+## Lance les trois services en parallèle dans des sous-shells
+dev: _mklogdir
+	@echo "▶  Démarrage de tous les services…"
+	@$(MAKE) -j3 back workflows front
+
+## Backend FastAPI  (Back/)
+back: _mklogdir
+	@echo "▶  [back]      http://localhost:8000"
+	cd $(BACK_DIR) && \
+	  ( [ -f .venv/bin/activate ] && . .venv/bin/activate || true ) && \
+	  uvicorn main:app --reload --host 0.0.0.0 --port 8000 2>&1 | tee ../$(LOG_BACK)
+
+## Worker Mistral / workflows  (Back/evaluation_risques/)
+workflows: _mklogdir
+	@echo "▶  [workflows] worker Mistral en écoute"
+	cd $(WORKFLOWS_DIR) && \
+	  ( [ -f .venv/bin/activate ] && . .venv/bin/activate || true ) && \
+	  PYTHONPATH=src .venv/bin/python -m src.entrypoints.worker 2>&1 | tee ../$(LOG_WORKFLOWS)
+
+## Frontend React  (front/)
+front: _mklogdir
+	@echo "▶  [front]     http://localhost:3000"
+	cd $(FRONT_DIR) && npm start 2>&1 | tee ../$(LOG_FRONT)
+
+# ---------------------------------------------------------------------------
+# Installation des dépendances
+# ---------------------------------------------------------------------------
+
+install: install-back install-workflows install-front
+
 install-back:
-	@echo "$(CYAN)▶  Installation du backend…$(RESET)"
-	$(MAKE) -C $(BACK_DIR) install-back
+	@echo "📦  Installation — Back"
+	cd $(BACK_DIR) && \
+	  ( command -v uv >/dev/null 2>&1 && uv sync || pip install -r requirements_api.txt )
 
-## Évaluation des risques — uv
-install-eval:
-	@echo "$(CYAN)▶  Installation evaluation_risques…$(RESET)"
-	$(MAKE) -C $(EVAL_DIR) install
+install-workflows:
+	@echo "📦  Installation — Workflows"
+	cd $(WORKFLOWS_DIR) && \
+	  ( command -v uv >/dev/null 2>&1 && uv sync || pip install -r requirements.txt )
 
-## Frontend (Node / React) — npm
 install-front:
-	@echo "$(CYAN)▶  Installation du frontend…$(RESET)"
-	$(MAKE) -C $(FRONT_DIR) install
+	@echo "📦  Installation — Front"
+	cd $(FRONT_DIR) && npm install
 
-# ============================================================================
-# RUN  (lance les trois services en parallèle dans des terminaux séparés)
-# ============================================================================
+# ---------------------------------------------------------------------------
+# Utilitaires
+# ---------------------------------------------------------------------------
 
-## Lance les trois services simultanément
-run:
-	@echo "$(CYAN)▶  Démarrage de tous les services…$(RESET)"
-	@trap 'kill 0' INT; \
-	$(MAKE) -C $(BACK_DIR)  run-back  & \
-	$(MAKE) -C $(EVAL_DIR)  run       & \
-	$(MAKE) -C $(FRONT_DIR) run       & \
-	wait
+## Affiche les logs des trois services en live (nécessite make dev en arrière-plan)
+logs:
+	tail -f $(LOG_BACK) $(LOG_WORKFLOWS) $(LOG_FRONT)
 
-## Backend uniquement
-run-back:
-	$(MAKE) -C $(BACK_DIR) run-back
+## Crée le dossier de logs si absent
+_mklogdir:
+	@mkdir -p .logs
 
-## Évaluation des risques uniquement
-run-eval:
-	$(MAKE) -C $(EVAL_DIR) run
+## Arrête les processus uvicorn / python worker / vite lancés par ce Makefile
+stop:
+	@echo "■  Arrêt des services…"
+	@pkill -f "uvicorn main:app"      2>/dev/null || true
+	@pkill -f "src.entrypoints.worker" 2>/dev/null || true
+	@pkill -f "react-scripts"         2>/dev/null || true
+	@echo "   Done."
 
-## Frontend uniquement
-run-front:
-	$(MAKE) -C $(FRONT_DIR) run
-
-# ============================================================================
-# AIDE
-# ============================================================================
-
-help:
-	@echo ""
-	@echo "$(CYAN)Commandes disponibles :$(RESET)"
-	@echo "  make install        — installe les 3 projets"
-	@echo "  make install-back   — installe le backend seul"
-	@echo "  make install-eval   — installe evaluation_risques seul"
-	@echo "  make install-front  — installe le frontend seul"
-	@echo ""
-	@echo "  make run            — lance les 3 services en parallèle"
-	@echo "  make run-back       — lance le backend seul"
-	@echo "  make run-eval       — lance evaluation_risques seul"
-	@echo "  make run-front      — lance le frontend seul"
-	@echo ""
+## Supprime les caches Python et les logs
+clean:
+	find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
+	find . -type d -name ".mypy_cache" -exec rm -rf {} + 2>/dev/null || true
+	find . -type d -name ".ruff_cache" -exec rm -rf {} + 2>/dev/null || true
+	rm -rf .logs
+	@echo "🧹  Nettoyé."
