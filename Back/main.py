@@ -12,14 +12,14 @@ import sqlite3
 import uuid
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
+from typing import Optional, List
 
 from dotenv import load_dotenv
 load_dotenv(override=True)
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
 
 # ── Config ────────────────────────────────────────────────────────────────────
@@ -28,6 +28,8 @@ WORKFLOW_NAME = "tpra-evaluation"
 DB_PATH       = "tickets.db"
 UPLOAD_DIR    = Path("uploads")
 UPLOAD_DIR.mkdir(exist_ok=True)
+ATTACHMENTS_DIR = Path("attachments")
+ATTACHMENTS_DIR.mkdir(exist_ok=True)
 
 app = FastAPI(title="TPRA Ticket Manager", version="1.0.0")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
@@ -58,6 +60,17 @@ def init_db():
             validated_by   TEXT,
             created_at     TEXT,
             updated_at     TEXT
+        )
+    """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS attachments (
+            id           TEXT PRIMARY KEY,
+            ticket_id    TEXT NOT NULL,
+            question_id  TEXT NOT NULL,
+            filename     TEXT NOT NULL,
+            file_path    TEXT NOT NULL,
+            uploaded_at  TEXT NOT NULL,
+            FOREIGN KEY (ticket_id) REFERENCES tickets(id)
         )
     """)
     conn.commit()
@@ -387,6 +400,158 @@ async def delete_ticket(ticket_id: str):
     conn.commit()
     conn.close()
     return {"deleted": ticket_id}
+
+
+class PieceJointeAction(BaseModel):
+    question_id: str
+    action: str          # "uploaded" | "not_needed"
+    comment: str = ""
+
+
+@app.post("/tickets/{ticket_id}/piece-jointe")
+async def handle_piece_jointe(ticket_id: str, req: PieceJointeAction):
+    """
+    Handles piece_jointe resolution for a question.
+    action='uploaded'    → a PJ was uploaded, score +1 (capped at 4)
+    action='not_needed'  → analyst declares no PJ needed, score +1 (capped at 4)
+    Updates the question score in the stored result JSON.
+    """
+    conn = get_db()
+    row = conn.execute("SELECT * FROM tickets WHERE id=?", (ticket_id,)).fetchone()
+    if not row:
+        conn.close()
+        raise HTTPException(404, "Ticket not found")
+
+    result = {}
+    if row["result"]:
+        try:
+            result = json.loads(row["result"])
+        except Exception:
+            pass
+
+    # Update the question score in question_scores list
+    updated    = False
+    new_score  = None
+    question_scores = result.get("question_scores", [])
+
+    for q in question_scores:
+        if q.get("question_id") == req.question_id:
+            old_score = q.get("score", 1)
+            new_s     = 4
+            q["score"]      = new_s
+            q["pj_action"]  = req.action
+            q["pj_comment"] = req.comment
+            if req.action == "not_needed":
+                q["piece_jointe_waived"] = True
+            new_score = new_s
+            updated = True
+            break
+
+    if not updated:
+        conn.close()
+        raise HTTPException(404, f"Question {req.question_id} not found in ticket results")
+
+    # Recalculate global_score
+    if question_scores:
+        result["global_score"] = round(
+            sum(q.get("score", 0) for q in question_scores) / len(question_scores), 2
+        )
+
+    result["question_scores"] = question_scores
+    now = datetime.utcnow().isoformat()
+    conn.execute("UPDATE tickets SET result=?, updated_at=? WHERE id=?",
+                 (json.dumps(result), now, ticket_id))
+    conn.commit()
+    conn.close()
+
+    return {
+        "question_id": req.question_id,
+        "action":      req.action,
+        "new_score":   new_score,
+        "global_score": result.get("global_score"),
+    }
+
+
+@app.post("/tickets/{ticket_id}/attachments")
+async def upload_attachment(
+    ticket_id: str,
+    question_id: str = Form(...),
+    file: UploadFile = File(...),
+):
+    """Upload a supporting document for a specific question."""
+    conn = get_db()
+    row = conn.execute("SELECT id FROM tickets WHERE id=?", (ticket_id,)).fetchone()
+    if not row:
+        conn.close()
+        raise HTTPException(404, "Ticket not found")
+
+    att_id    = str(uuid.uuid4())
+    filename  = file.filename or "document"
+    safe_name = f"{att_id}_{filename}"
+    file_path = ATTACHMENTS_DIR / ticket_id
+    file_path.mkdir(exist_ok=True)
+    full_path = file_path / safe_name
+    full_path.write_bytes(await file.read())
+    now = datetime.utcnow().isoformat()
+
+    conn.execute("""
+        INSERT INTO attachments (id, ticket_id, question_id, filename, file_path, uploaded_at)
+        VALUES (?, ?, ?, ?, ?, ?)
+    """, (att_id, ticket_id, question_id, filename, str(full_path), now))
+    conn.commit()
+    conn.close()
+
+    return {"id": att_id, "ticket_id": ticket_id, "question_id": question_id,
+            "filename": filename, "uploaded_at": now}
+
+
+@app.get("/tickets/{ticket_id}/attachments")
+async def list_attachments(ticket_id: str):
+    """List all attachments for a ticket, grouped by question_id."""
+    conn = get_db()
+    rows = conn.execute(
+        "SELECT * FROM attachments WHERE ticket_id=? ORDER BY uploaded_at DESC",
+        (ticket_id,)
+    ).fetchall()
+    conn.close()
+    return [{"id": r["id"], "ticket_id": r["ticket_id"], "question_id": r["question_id"],
+             "filename": r["filename"], "uploaded_at": r["uploaded_at"]} for r in rows]
+
+
+@app.get("/tickets/{ticket_id}/attachments/{att_id}/download")
+async def download_attachment(ticket_id: str, att_id: str):
+    """Download a specific attachment."""
+    conn = get_db()
+    row = conn.execute(
+        "SELECT * FROM attachments WHERE id=? AND ticket_id=?", (att_id, ticket_id)
+    ).fetchone()
+    conn.close()
+    if not row:
+        raise HTTPException(404, "Attachment not found")
+    path = Path(row["file_path"])
+    if not path.exists():
+        raise HTTPException(404, "File not found on disk")
+    return FileResponse(path=str(path), filename=row["filename"])
+
+
+@app.delete("/tickets/{ticket_id}/attachments/{att_id}")
+async def delete_attachment(ticket_id: str, att_id: str):
+    """Delete a specific attachment."""
+    conn = get_db()
+    row = conn.execute(
+        "SELECT * FROM attachments WHERE id=? AND ticket_id=?", (att_id, ticket_id)
+    ).fetchone()
+    if not row:
+        conn.close()
+        raise HTTPException(404, "Attachment not found")
+    try:
+        Path(row["file_path"]).unlink(missing_ok=True)
+    except Exception:
+        pass
+    conn.execute("DELETE FROM attachments WHERE id=?", (att_id,))
+    conn.commit()
+    conn.close()
+    return {"deleted": att_id}
 
 
 @app.get("/health")

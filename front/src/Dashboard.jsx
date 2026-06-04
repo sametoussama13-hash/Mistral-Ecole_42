@@ -13,6 +13,401 @@ const USERS = [
 ];
 
 
+
+// ── i18n ─────────────────────────────────────────────────────────────────────
+const LANGS = {
+  fr: { label:"Français",  flag:"🇫🇷", rtl:false },
+  en: { label:"English",   flag:"🇬🇧", rtl:false },
+  es: { label:"Español",   flag:"🇪🇸", rtl:false },
+  ar: { label:"العربية",   flag:"🇸🇦", rtl:true  },
+};
+
+const T_ALL = {
+  fr: {
+    // Login
+    login_title:"Connexion", login_subtitle:"Accès réservé aux membres de l'équipe",
+    login_profile:"VOTRE PROFIL", login_admin:"Admin", login_admin_sub:"Gestion complète",
+    login_cyber:"Analyste Cyber", login_cyber_sub:"Analyse & validation",
+    login_id:"IDENTIFIANT", login_id_ph:"nom.utilisateur",
+    login_pwd:"MOT DE PASSE", login_pwd_ph:"••••••••",
+    login_btn:"Se connecter →", login_loading:"Connexion…",
+    login_error:"Identifiants incorrects.", login_footer:"Accès sécurisé · CMA CGM Cybersécurité",
+    // Header
+    platform:"TPRA Platform", platform_sub:"THIRD PARTY RISK ASSESSMENT",
+    role_admin:"ADMIN", role_cyber:"ANALYSTE CYBER",
+    btn_refresh:"Actualiser", btn_new:"Nouveau ticket", btn_logout:"Quitter",
+    btn_light:"Mode clair", btn_dark:"Mode sombre",
+    // Dashboard
+    greet:"Bonjour,", dashboard:"TABLEAU DE BORD",
+    kpi_total:"Tickets total", kpi_running:"En cours", kpi_validate:"À valider",
+    kpi_done:"Terminés", kpi_rejected:"Rejetés / Err.",
+    kpi_one:"ticket", kpi_many:"tickets", kpi_none:"Aucun",
+    // Table
+    col_vendor:"Fournisseur", col_analyst:"Analyste / Validation",
+    col_decision:"Décision", col_status:"Statut", col_date:"Date", col_actions:"Actions",
+    btn_validate:"Valider", btn_excel:"Excel", btn_details:"Détails",
+    btn_delete:"Supprimer", btn_deselect:"Désélectionner", btn_cancel:"Annuler",
+    selected:"sélectionné", selected_p:"sélectionnés",
+    validated_ai:"Approuvé par l'IA", validated_by:"Approuvé par",
+    approved:"Approuvé", rejected:"Rejeté",
+    // Filters
+    filter_all:"Tous", filter_pending:"En attente", filter_running:"En cours",
+    filter_validate:"À valider", filter_done:"Terminés", filter_rejected:"Rejetés", filter_errors:"Erreurs",
+    search_ph:"Rechercher…", results:"résultat", results_p:"résultats", for:"pour",
+    no_tickets:"Aucun ticket pour l'instant", no_results:"Aucun résultat pour",
+    create_first:"Créer le premier ticket", loading:"Chargement…",
+    // Modals
+    new_ticket:"Nouveau ticket TPRA", new_subtitle:"Lancer une analyse de risque fournisseur",
+    vendor:"Fournisseur *", project:"Projet", analyst:"Analyste",
+    file:"Fichier * (.xlsx, .pdf, .txt)", drop_file:"Glissez un fichier ou cliquez pour parcourir",
+    cancel:"Annuler", launch:"Lancer l'analyse", launching:"Lancement…",
+    field_required:"Le fournisseur et le fichier sont requis.",
+    // Detail
+    executive_summary:"RÉSUMÉ EXÉCUTIF", showstoppers:"SHOWSTOPPERS",
+    workflow:"PROGRESSION DU WORKFLOW", decision:"Décision", risk_level:"Niveau de risque",
+    global_score:"Score global", questions:"Questions",
+    scores_low:"Scores ≤ 2", risks_found:"Risques identifiés", analyst_label:"Analyste",
+    pj_count:"Pièces jointes", decision_final:"Décision finale :", risk_global:"Niveau de risque global :",
+    tab_summary:"Résumé", tab_questions:"Questions", tab_risks:"Risques",
+    tab_showstoppers:"Showstoppers", tab_attachments:"Pièces jointes",
+    see_all:"Voir tous →", see_all_f:"Voir toutes", overview_questions:"APERÇU DES QUESTIONS",
+    risks_section:"RISQUES IDENTIFIÉS", pj_section:"PIÈCES JOINTES",
+    pj_missing:"manquante", pj_missing_p:"manquantes", pj_complete:"Complètes ✓",
+    pj_manage:"Gérer →", pj_required:"PJ requise", pj_done:"Document fourni — Score → 4/4",
+    pj_waived:"Pas de PJ nécessaire — Score → 4/4", pj_ref:"PJ requise · réf.",
+    pj_ref2:"Document lié à", pj_deposit:"Déposer le document", pj_no_need:"Pas besoin de PJ",
+    pj_add:"Ajouter un autre fichier", pj_replace:"Remplacer", pj_add_doc:"Ajouter un document",
+    pj_sending:"Envoi…", pj_processing:"En cours…",
+    docs_required:"Documents requis par l'analyse", docs_optional:"Autres questions (optionnel)",
+    pj_provided:"pièce jointe fournie", pj_provided_p:"pièces jointes fournies",
+    pj_missing2:"document manquant", pj_missing2_p:"documents manquants", pj_all_ok:"— Toutes les pièces sont fournies ✓",
+    description:"DESCRIPTION", recommendation:"RECOMMANDATION",
+    vendor_response:"RÉPONSE FOURNISSEUR", justification:"JUSTIFICATION",
+    block_reason:"RAISON DU BLOCAGE", followup:"QUESTION DE SUIVI",
+    close:"Fermer", download_excel:"Télécharger Excel", download:"⬇ Excel",
+    approve:"Approuver & Générer Excel", reject:"Rejeter", confirm_reject:"Confirmer le rejet",
+    override_approve:"Passer outre & Approuver", comments:"Commentaires (optionnel)",
+    comments_ph:"Ajoutez vos commentaires…", sending:"Envoi…",
+    reject_banner:"L'analyse recommande le rejet de ce fournisseur",
+    validate_banner:"Ce ticket nécessite une validation manuelle.",
+    blocking:"problème bloquant", blocking_p:"problèmes bloquants",
+    blocking_sub:"Ces points doivent être résolus avant toute approbation.",
+    score_dist:"DISTRIBUTION DES SCORES",
+    score_labels:["","Non-conforme","Partiel","Conforme","Mature"],
+    // Tracking
+    tracking_wait:"Traitement en cours, veuillez patienter…",
+    tracking_sub:"Cette fenêtre se met à jour automatiquement toutes les 3 secondes.",
+    connecting:"Connexion au serveur…", analysis_running:"Analyse en cours…",
+    workflow_error:"Le workflow a rencontré une erreur.",
+    auto_approved:"Analyse terminée — Approuvé", auto_approved_sub:"Le ticket a été validé automatiquement et ajouté à la liste.",
+    auto_rejected:"Analyse terminée — Rejeté", report_loading:"Chargement du rapport…",
+    no_result:"Aucun résultat disponible.",
+    // Validate
+    to_validate:"À valider", pending_p:"En attente",
+    // Confirm delete
+    delete_title:"Supprimer", delete_ticket:"ticket", delete_ticket_p:"tickets",
+    delete_warn:"Cette action est irréversible.", delete_confirm:"Supprimer",
+    // Upload
+    upload_title:"Nouveau ticket TPRA",
+  },
+  en: {
+    login_title:"Sign In", login_subtitle:"Access restricted to team members",
+    login_profile:"YOUR PROFILE", login_admin:"Admin", login_admin_sub:"Full management",
+    login_cyber:"Cyber Analyst", login_cyber_sub:"Analysis & validation",
+    login_id:"USERNAME", login_id_ph:"user.name",
+    login_pwd:"PASSWORD", login_pwd_ph:"••••••••",
+    login_btn:"Sign in →", login_loading:"Signing in…",
+    login_error:"Incorrect credentials.", login_footer:"Secure access · CMA CGM Cybersecurity",
+    platform:"TPRA Platform", platform_sub:"THIRD PARTY RISK ASSESSMENT",
+    role_admin:"ADMIN", role_cyber:"CYBER ANALYST",
+    btn_refresh:"Refresh", btn_new:"New ticket", btn_logout:"Logout",
+    btn_light:"Light mode", btn_dark:"Dark mode",
+    greet:"Hello,", dashboard:"DASHBOARD",
+    kpi_total:"Total tickets", kpi_running:"In progress", kpi_validate:"To validate",
+    kpi_done:"Completed", kpi_rejected:"Rejected / Err.",
+    kpi_one:"ticket", kpi_many:"tickets", kpi_none:"None",
+    col_vendor:"Vendor", col_analyst:"Analyst / Approved by",
+    col_decision:"Decision", col_status:"Status", col_date:"Date", col_actions:"Actions",
+    btn_validate:"Validate", btn_excel:"Excel", btn_details:"Details",
+    btn_delete:"Delete", btn_deselect:"Deselect", btn_cancel:"Cancel",
+    selected:"selected", selected_p:"selected",
+    validated_ai:"Approved by AI", validated_by:"Approved by",
+    approved:"Approved", rejected:"Rejected",
+    filter_all:"All", filter_pending:"Pending", filter_running:"In progress",
+    filter_validate:"To validate", filter_done:"Completed", filter_rejected:"Rejected", filter_errors:"Errors",
+    search_ph:"Search…", results:"result", results_p:"results", for:"for",
+    no_tickets:"No tickets yet", no_results:"No results for",
+    create_first:"Create first ticket", loading:"Loading…",
+    new_ticket:"New TPRA Ticket", new_subtitle:"Launch a vendor risk analysis",
+    vendor:"Vendor *", project:"Project", analyst:"Analyst",
+    file:"File * (.xlsx, .pdf, .txt)", drop_file:"Drop file here or click to browse",
+    cancel:"Cancel", launch:"Launch analysis", launching:"Launching…",
+    field_required:"Vendor and file are required.",
+    executive_summary:"EXECUTIVE SUMMARY", showstoppers:"SHOWSTOPPERS",
+    workflow:"WORKFLOW PROGRESS", decision:"Decision", risk_level:"Risk level",
+    global_score:"Global score", questions:"Questions",
+    scores_low:"Scores ≤ 2", risks_found:"Identified risks", analyst_label:"Analyst",
+    pj_count:"Attachments", decision_final:"Final decision:", risk_global:"Global risk level:",
+    tab_summary:"Summary", tab_questions:"Questions", tab_risks:"Risks",
+    tab_showstoppers:"Showstoppers", tab_attachments:"Attachments",
+    see_all:"See all →", see_all_f:"See all", overview_questions:"QUESTIONS OVERVIEW",
+    risks_section:"IDENTIFIED RISKS", pj_section:"ATTACHMENTS",
+    pj_missing:"missing", pj_missing_p:"missing", pj_complete:"Complete ✓",
+    pj_manage:"Manage →", pj_required:"Required", pj_done:"Document provided — Score → 4/4",
+    pj_waived:"No attachment needed — Score → 4/4", pj_ref:"Required · ref.",
+    pj_ref2:"Document linked to", pj_deposit:"Upload document", pj_no_need:"No attachment needed",
+    pj_add:"Add another file", pj_replace:"Replace", pj_add_doc:"Add document",
+    pj_sending:"Uploading…", pj_processing:"Processing…",
+    docs_required:"Documents required by analysis", docs_optional:"Other questions (optional)",
+    pj_provided:"attachment provided", pj_provided_p:"attachments provided",
+    pj_missing2:"missing document", pj_missing2_p:"missing documents", pj_all_ok:"— All attachments provided ✓",
+    description:"DESCRIPTION", recommendation:"RECOMMENDATION",
+    vendor_response:"VENDOR RESPONSE", justification:"SCORE JUSTIFICATION",
+    block_reason:"BLOCK REASON", followup:"FOLLOW-UP QUESTION",
+    close:"Close", download_excel:"Download Excel", download:"⬇ Excel",
+    approve:"Approve & Generate Excel", reject:"Reject", confirm_reject:"Confirm rejection",
+    override_approve:"Override & Approve", comments:"Comments (optional)",
+    comments_ph:"Add your comments…", sending:"Sending…",
+    reject_banner:"Analysis recommends rejecting this vendor",
+    validate_banner:"This ticket requires manual validation.",
+    blocking:"blocking issue", blocking_p:"blocking issues",
+    blocking_sub:"These issues must be resolved before any approval.",
+    score_dist:"SCORE DISTRIBUTION",
+    score_labels:["","Non-compliant","Partial","Compliant","Mature"],
+    tracking_wait:"Processing, please wait…",
+    tracking_sub:"This window updates automatically every 3 seconds.",
+    connecting:"Connecting to server…", analysis_running:"Analysis in progress…",
+    workflow_error:"The workflow encountered an error.",
+    auto_approved:"Analysis complete — Approved", auto_approved_sub:"Ticket automatically validated and added to the list.",
+    auto_rejected:"Analysis complete — Rejected", report_loading:"Loading report…",
+    no_result:"No results available.",
+    to_validate:"To validate", pending_p:"Pending",
+    delete_title:"Delete", delete_ticket:"ticket", delete_ticket_p:"tickets",
+    delete_warn:"This action is irreversible.", delete_confirm:"Delete",
+    upload_title:"New TPRA Ticket",
+  },
+  es: {
+    login_title:"Iniciar sesión", login_subtitle:"Acceso reservado a miembros del equipo",
+    login_profile:"SU PERFIL", login_admin:"Admin", login_admin_sub:"Gestión completa",
+    login_cyber:"Analista Cyber", login_cyber_sub:"Análisis y validación",
+    login_id:"USUARIO", login_id_ph:"nombre.usuario",
+    login_pwd:"CONTRASEÑA", login_pwd_ph:"••••••••",
+    login_btn:"Iniciar sesión →", login_loading:"Iniciando…",
+    login_error:"Credenciales incorrectas.", login_footer:"Acceso seguro · CMA CGM Ciberseguridad",
+    platform:"TPRA Platform", platform_sub:"EVALUACIÓN DE RIESGO DE TERCEROS",
+    role_admin:"ADMIN", role_cyber:"ANALISTA CYBER",
+    btn_refresh:"Actualizar", btn_new:"Nuevo ticket", btn_logout:"Salir",
+    btn_light:"Modo claro", btn_dark:"Modo oscuro",
+    greet:"Hola,", dashboard:"PANEL DE CONTROL",
+    kpi_total:"Total tickets", kpi_running:"En curso", kpi_validate:"Por validar",
+    kpi_done:"Completados", kpi_rejected:"Rechazados / Err.",
+    kpi_one:"ticket", kpi_many:"tickets", kpi_none:"Ninguno",
+    col_vendor:"Proveedor", col_analyst:"Analista / Aprobado por",
+    col_decision:"Decisión", col_status:"Estado", col_date:"Fecha", col_actions:"Acciones",
+    btn_validate:"Validar", btn_excel:"Excel", btn_details:"Detalles",
+    btn_delete:"Eliminar", btn_deselect:"Deseleccionar", btn_cancel:"Cancelar",
+    selected:"seleccionado", selected_p:"seleccionados",
+    validated_ai:"Aprobado por IA", validated_by:"Aprobado por",
+    approved:"Aprobado", rejected:"Rechazado",
+    filter_all:"Todos", filter_pending:"Pendiente", filter_running:"En curso",
+    filter_validate:"Por validar", filter_done:"Completados", filter_rejected:"Rechazados", filter_errors:"Errores",
+    search_ph:"Buscar…", results:"resultado", results_p:"resultados", for:"para",
+    no_tickets:"Sin tickets por ahora", no_results:"Sin resultados para",
+    create_first:"Crear el primer ticket", loading:"Cargando…",
+    new_ticket:"Nuevo ticket TPRA", new_subtitle:"Lanzar un análisis de riesgo de proveedor",
+    vendor:"Proveedor *", project:"Proyecto", analyst:"Analista",
+    file:"Archivo * (.xlsx, .pdf, .txt)", drop_file:"Arrastre el archivo o haga clic",
+    cancel:"Cancelar", launch:"Lanzar análisis", launching:"Lanzando…",
+    field_required:"El proveedor y el archivo son obligatorios.",
+    executive_summary:"RESUMEN EJECUTIVO", showstoppers:"BLOQUEANTES",
+    workflow:"PROGRESO DEL FLUJO", decision:"Decisión", risk_level:"Nivel de riesgo",
+    global_score:"Puntuación global", questions:"Preguntas",
+    scores_low:"Puntuaciones ≤ 2", risks_found:"Riesgos identificados", analyst_label:"Analista",
+    pj_count:"Adjuntos", decision_final:"Decisión final:", risk_global:"Nivel de riesgo global:",
+    tab_summary:"Resumen", tab_questions:"Preguntas", tab_risks:"Riesgos",
+    tab_showstoppers:"Bloqueantes", tab_attachments:"Adjuntos",
+    see_all:"Ver todos →", see_all_f:"Ver todos", overview_questions:"VISTA GENERAL DE PREGUNTAS",
+    risks_section:"RIESGOS IDENTIFICADOS", pj_section:"DOCUMENTOS ADJUNTOS",
+    pj_missing:"faltante", pj_missing_p:"faltantes", pj_complete:"Completos ✓",
+    pj_manage:"Gestionar →", pj_required:"Requerido", pj_done:"Documento aportado — Puntuación → 4/4",
+    pj_waived:"Sin adjunto necesario — Puntuación → 4/4", pj_ref:"Requerido · ref.",
+    pj_ref2:"Documento vinculado a", pj_deposit:"Subir documento", pj_no_need:"Sin adjunto necesario",
+    pj_add:"Añadir otro archivo", pj_replace:"Reemplazar", pj_add_doc:"Añadir documento",
+    pj_sending:"Enviando…", pj_processing:"Procesando…",
+    docs_required:"Documentos requeridos por el análisis", docs_optional:"Otras preguntas (opcional)",
+    pj_provided:"adjunto aportado", pj_provided_p:"adjuntos aportados",
+    pj_missing2:"documento faltante", pj_missing2_p:"documentos faltantes", pj_all_ok:"— Todos los adjuntos aportados ✓",
+    description:"DESCRIPCIÓN", recommendation:"RECOMENDACIÓN",
+    vendor_response:"RESPUESTA DEL PROVEEDOR", justification:"JUSTIFICACIÓN",
+    block_reason:"MOTIVO DEL BLOQUEO", followup:"PREGUNTA DE SEGUIMIENTO",
+    close:"Cerrar", download_excel:"Descargar Excel", download:"⬇ Excel",
+    approve:"Aprobar y generar Excel", reject:"Rechazar", confirm_reject:"Confirmar rechazo",
+    override_approve:"Anular y aprobar", comments:"Comentarios (opcional)",
+    comments_ph:"Añada sus comentarios…", sending:"Enviando…",
+    reject_banner:"El análisis recomienda rechazar a este proveedor",
+    validate_banner:"Este ticket requiere validación manual.",
+    blocking:"problema bloqueante", blocking_p:"problemas bloqueantes",
+    blocking_sub:"Estos puntos deben resolverse antes de cualquier aprobación.",
+    score_dist:"DISTRIBUCIÓN DE PUNTUACIONES",
+    score_labels:["","No conforme","Parcial","Conforme","Maduro"],
+    tracking_wait:"Procesando, por favor espere…",
+    tracking_sub:"Esta ventana se actualiza automáticamente cada 3 segundos.",
+    connecting:"Conectando al servidor…", analysis_running:"Análisis en curso…",
+    workflow_error:"El flujo de trabajo encontró un error.",
+    auto_approved:"Análisis completado — Aprobado", auto_approved_sub:"Ticket validado automáticamente y añadido a la lista.",
+    auto_rejected:"Análisis completado — Rechazado", report_loading:"Cargando informe…",
+    no_result:"Sin resultados disponibles.",
+    to_validate:"Por validar", pending_p:"Pendiente",
+    delete_title:"Eliminar", delete_ticket:"ticket", delete_ticket_p:"tickets",
+    delete_warn:"Esta acción es irreversible.", delete_confirm:"Eliminar",
+    upload_title:"Nuevo ticket TPRA",
+  },
+  ar: {
+    login_title:"تسجيل الدخول", login_subtitle:"الوصول مخصص لأعضاء الفريق",
+    login_profile:"ملفك الشخصي", login_admin:"مدير", login_admin_sub:"الإدارة الكاملة",
+    login_cyber:"محلل الأمن السيبراني", login_cyber_sub:"التحليل والتحقق",
+    login_id:"اسم المستخدم", login_id_ph:"اسم.المستخدم",
+    login_pwd:"كلمة المرور", login_pwd_ph:"••••••••",
+    login_btn:"تسجيل الدخول ←", login_loading:"جارٍ التسجيل…",
+    login_error:"بيانات الاعتماد غير صحيحة.", login_footer:"وصول آمن · CMA CGM للأمن السيبراني",
+    platform:"منصة TPRA", platform_sub:"تقييم مخاطر الطرف الثالث",
+    role_admin:"مدير", role_cyber:"محلل سيبراني",
+    btn_refresh:"تحديث", btn_new:"تذكرة جديدة", btn_logout:"خروج",
+    btn_light:"الوضع الفاتح", btn_dark:"الوضع الداكن",
+    greet:"مرحباً،", dashboard:"لوحة التحكم",
+    kpi_total:"إجمالي التذاكر", kpi_running:"قيد المعالجة", kpi_validate:"للتحقق",
+    kpi_done:"مكتملة", kpi_rejected:"مرفوضة / خطأ",
+    kpi_one:"تذكرة", kpi_many:"تذاكر", kpi_none:"لا شيء",
+    col_vendor:"المورد", col_analyst:"المحلل / المعتمد من",
+    col_decision:"القرار", col_status:"الحالة", col_date:"التاريخ", col_actions:"الإجراءات",
+    btn_validate:"تحقق", btn_excel:"Excel", btn_details:"التفاصيل",
+    btn_delete:"حذف", btn_deselect:"إلغاء التحديد", btn_cancel:"إلغاء",
+    selected:"محدد", selected_p:"محددة",
+    validated_ai:"معتمد بواسطة الذكاء الاصطناعي", validated_by:"معتمد من",
+    approved:"معتمد", rejected:"مرفوض",
+    filter_all:"الكل", filter_pending:"قيد الانتظار", filter_running:"قيد المعالجة",
+    filter_validate:"للتحقق", filter_done:"مكتملة", filter_rejected:"مرفوضة", filter_errors:"أخطاء",
+    search_ph:"بحث…", results:"نتيجة", results_p:"نتائج", for:"لـ",
+    no_tickets:"لا توجد تذاكر حتى الآن", no_results:"لا توجد نتائج لـ",
+    create_first:"إنشاء أول تذكرة", loading:"جارٍ التحميل…",
+    new_ticket:"تذكرة TPRA جديدة", new_subtitle:"إطلاق تحليل مخاطر المورد",
+    vendor:"المورد *", project:"المشروع", analyst:"المحلل",
+    file:"ملف * (.xlsx, .pdf, .txt)", drop_file:"اسحب الملف أو انقر للاستعراض",
+    cancel:"إلغاء", launch:"إطلاق التحليل", launching:"جارٍ الإطلاق…",
+    field_required:"المورد والملف مطلوبان.",
+    executive_summary:"الملخص التنفيذي", showstoppers:"عوامل الإيقاف",
+    workflow:"تقدم سير العمل", decision:"القرار", risk_level:"مستوى المخاطرة",
+    global_score:"النتيجة الإجمالية", questions:"الأسئلة",
+    scores_low:"نتائج ≤ 2", risks_found:"المخاطر المحددة", analyst_label:"المحلل",
+    pj_count:"المرفقات", decision_final:"القرار النهائي:", risk_global:"مستوى المخاطرة العالمي:",
+    tab_summary:"الملخص", tab_questions:"الأسئلة", tab_risks:"المخاطر",
+    tab_showstoppers:"عوامل الإيقاف", tab_attachments:"المرفقات",
+    see_all:"عرض الكل ←", see_all_f:"عرض الكل", overview_questions:"نظرة عامة على الأسئلة",
+    risks_section:"المخاطر المحددة", pj_section:"المرفقات المطلوبة",
+    pj_missing:"مفقود", pj_missing_p:"مفقودة", pj_complete:"مكتملة ✓",
+    pj_manage:"إدارة ←", pj_required:"مطلوب", pj_done:"تم تقديم الوثيقة — النتيجة → 4/4",
+    pj_waived:"لا حاجة لمرفق — النتيجة → 4/4", pj_ref:"مطلوب · مرجع.",
+    pj_ref2:"وثيقة مرتبطة بـ", pj_deposit:"رفع الوثيقة", pj_no_need:"لا حاجة لمرفق",
+    pj_add:"إضافة ملف آخر", pj_replace:"استبدال", pj_add_doc:"إضافة وثيقة",
+    pj_sending:"جارٍ الإرسال…", pj_processing:"جارٍ المعالجة…",
+    docs_required:"الوثائق المطلوبة بالتحليل", docs_optional:"أسئلة أخرى (اختياري)",
+    pj_provided:"مرفق مقدم", pj_provided_p:"مرفقات مقدمة",
+    pj_missing2:"وثيقة مفقودة", pj_missing2_p:"وثائق مفقودة", pj_all_ok:"— جميع المرفقات مقدمة ✓",
+    description:"الوصف", recommendation:"التوصية",
+    vendor_response:"رد المورد", justification:"تبرير النتيجة",
+    block_reason:"سبب الحجب", followup:"سؤال المتابعة",
+    close:"إغلاق", download_excel:"تنزيل Excel", download:"⬇ Excel",
+    approve:"اعتماد وإنشاء Excel", reject:"رفض", confirm_reject:"تأكيد الرفض",
+    override_approve:"تجاوز والاعتماد", comments:"تعليقات (اختياري)",
+    comments_ph:"أضف تعليقاتك…", sending:"جارٍ الإرسال…",
+    reject_banner:"يوصي التحليل برفض هذا المورد",
+    validate_banner:"تتطلب هذه التذكرة تحققاً يدوياً.",
+    blocking:"مشكلة حاجبة", blocking_p:"مشاكل حاجبة",
+    blocking_sub:"يجب حل هذه النقاط قبل أي اعتماد.",
+    score_dist:"توزيع النتائج",
+    score_labels:["","غير مطابق","جزئي","مطابق","ناضج"],
+    tracking_wait:"جارٍ المعالجة، يرجى الانتظار…",
+    tracking_sub:"تتحدث هذه النافذة تلقائياً كل 3 ثوانٍ.",
+    connecting:"جارٍ الاتصال بالخادم…", analysis_running:"التحليل جارٍ…",
+    workflow_error:"واجه سير العمل خطأً.",
+    auto_approved:"اكتمل التحليل — معتمد", auto_approved_sub:"تمت الموافقة التلقائية على التذكرة وإضافتها للقائمة.",
+    auto_rejected:"اكتمل التحليل — مرفوض", report_loading:"جارٍ تحميل التقرير…",
+    no_result:"لا توجد نتائج متاحة.",
+    to_validate:"للتحقق", pending_p:"قيد الانتظار",
+    delete_title:"حذف", delete_ticket:"تذكرة", delete_ticket_p:"تذاكر",
+    delete_warn:"هذا الإجراء لا رجعة فيه.", delete_confirm:"حذف",
+    upload_title:"تذكرة TPRA جديدة",
+  },
+};
+
+// Hook
+function useLang() {
+  const [lang, setLang] = useState(() => {
+    return localStorage.getItem("tpra_lang") || "fr";
+  });
+  function changeLang(l) {
+    localStorage.setItem("tpra_lang", l);
+    setLang(l);
+    document.documentElement.dir = LANGS[l].rtl ? "rtl" : "ltr";
+    document.documentElement.lang = l;
+  }
+  useEffect(() => {
+    document.documentElement.dir = LANGS[lang].rtl ? "rtl" : "ltr";
+    document.documentElement.lang = lang;
+  }, [lang]);
+  return [T_ALL[lang], lang, changeLang, LANGS[lang].rtl];
+}
+
+// Lang selector component
+function LangSelector({ lang, changeLang, dark }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+  useEffect(() => {
+    function handle(e) { if (ref.current && !ref.current.contains(e.target)) setOpen(false); }
+    document.addEventListener("mousedown", handle);
+    return () => document.removeEventListener("mousedown", handle);
+  }, []);
+  return (
+    <div ref={ref} style={{ position:"relative" }}>
+      <button onClick={() => setOpen(o => !o)}
+        style={{ display:"flex", alignItems:"center", gap:6, padding:"6px 10px", borderRadius:8,
+          background: dark ? "rgba(255,255,255,0.06)" : "rgba(18,33,75,0.06)",
+          border: dark ? "1px solid rgba(255,255,255,0.1)" : "1px solid rgba(18,33,75,0.15)",
+          color: dark ? "rgba(255,255,255,0.8)" : "#12214B",
+          cursor:"pointer", fontSize:12, fontWeight:600 }}>
+        <span>{LANGS[lang].flag}</span>
+        <span>{LANGS[lang].label}</span>
+        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"
+          style={{ transform: open ? "rotate(180deg)" : "none", transition:"transform 0.2s" }}>
+          <polyline points="6 9 12 15 18 9"/>
+        </svg>
+      </button>
+      {open && (
+        <div style={{ position:"absolute", top:"calc(100% + 6px)", right:0, zIndex:500,
+          background: dark ? "#0d1e3a" : "#fff",
+          border: dark ? "1px solid rgba(255,255,255,0.1)" : "1px solid #e2e8f0",
+          borderRadius:10, overflow:"hidden", minWidth:150,
+          boxShadow:"0 8px 24px rgba(0,0,0,0.15)" }}>
+          {Object.entries(LANGS).map(([code, info]) => (
+            <button key={code} onClick={() => { changeLang(code); setOpen(false); }}
+              style={{ display:"flex", alignItems:"center", gap:10, width:"100%",
+                padding:"9px 14px", background: lang===code ? (dark?"rgba(227,6,19,0.1)":"rgba(227,6,19,0.06)") : "transparent",
+                border:"none", cursor:"pointer", fontSize:13,
+                color: lang===code ? "#E30613" : (dark?"rgba(255,255,255,0.75)":"#374151"),
+                fontWeight: lang===code ? 700 : 400,
+                textAlign: info.rtl ? "right" : "left",
+                direction: info.rtl ? "rtl" : "ltr" }}>
+              <span style={{ fontSize:16 }}>{info.flag}</span>
+              <span>{info.label}</span>
+              {lang===code && <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#E30613" strokeWidth="3" strokeLinecap="round" style={{marginLeft:"auto"}}><polyline points="20 6 9 17 4 12"/></svg>}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Cyber Network Background ──────────────────────────────────────────────────
 function CyberBackground() {
   const canvasRef = useRef(null);
@@ -201,7 +596,7 @@ function CyberBackground() {
 }
 
 // ── Login Screen ──────────────────────────────────────────────────────────────
-function LoginScreen({ onLogin }) {
+function LoginScreen({ onLogin, tr, lang, changeLang, isRtl }) {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [showPwd, setShowPwd]   = useState(false);
@@ -220,7 +615,7 @@ function LoginScreen({ onLogin }) {
       if (user) {
         onLogin(user);
       } else {
-        setError("Identifiants incorrects. Vérifiez votre nom d'utilisateur et mot de passe.");
+        setError(tr.login_error);
         setLoading(false);
       }
     }, 600);
@@ -341,6 +736,11 @@ function LoginScreen({ onLogin }) {
           <div style={{ color:"rgba(255,255,255,0.65)", fontSize:12, marginTop:4, fontWeight:400, textAlign:"center", letterSpacing:"0.06em" }}>THIRD PARTY RISK ASSESSMENT</div>
         </div>
 
+        {/* Lang selector */}
+        <div style={{ display:"flex", justifyContent:"center", marginBottom:16 }}>
+          <LangSelector lang={lang} changeLang={changeLang} dark={true} />
+        </div>
+
         {/* Form card */}
         <div style={{
           background: "#fff",
@@ -378,7 +778,7 @@ function LoginScreen({ onLogin }) {
                 className="login-input"
                 value={username}
                 onChange={e=>{ setUsername(e.target.value); setError(""); }}
-                placeholder="nom.utilisateur"
+                placeholder={tr.login_id_ph}
                 autoComplete="username"
                 required
               />
@@ -394,7 +794,7 @@ function LoginScreen({ onLogin }) {
                   type={showPwd ? "text" : "password"}
                   value={password}
                   onChange={e=>{ setPassword(e.target.value); setError(""); }}
-                  placeholder="••••••••"
+                  placeholder={tr.login_pwd_ph}
                   autoComplete="current-password"
                   required
                   style={{ paddingRight:42 }}
@@ -677,6 +1077,163 @@ function LiveTrackingModal({ ticketId, onClose, onRefreshList }) {
   const result      = ticket?.result || {};
   const hasQuestions = result.question_scores?.length > 0;
 
+  // ── Pièces jointes ──────────────────────────────────────────────────────────
+  const [attachments, setAttachments] = useState({});
+  const [, setUploading]              = useState({});
+  const [pjActions,   setPjActions]   = useState({});
+  const [pjLoading,   setPjLoading]   = useState({});
+
+  const fetchAttachments = useCallback(async () => {
+    if (!ticket?.id) return;
+    try {
+      const res  = await fetch(`${API}/tickets/${ticket.id}/attachments`);
+      const list = await res.json();
+      const grouped = list.reduce((acc, a) => {
+        if (!acc[a.question_id]) acc[a.question_id] = [];
+        acc[a.question_id].push(a);
+        return acc;
+      }, {});
+      setAttachments(grouped);
+    } catch(e) { console.error(e); }
+  }, [ticket?.id]);
+
+  useEffect(() => { fetchAttachments(); }, [fetchAttachments]);
+
+  async function uploadFile(questionId, file) {
+    setUploading(u => ({ ...u, [questionId]: true }));
+    const fd = new FormData();
+    fd.append("question_id", questionId);
+    fd.append("file", file);
+    try {
+      await fetch(`${API}/tickets/${ticket.id}/attachments`, { method:"POST", body:fd });
+      await fetchAttachments();
+    } catch(e) { console.error(e); }
+    setUploading(u => ({ ...u, [questionId]: false }));
+  }
+
+  async function deleteAttachment(attId) {
+    try {
+      await fetch(`${API}/tickets/${ticket.id}/attachments/${attId}`, { method:"DELETE" });
+      await fetchAttachments();
+    } catch(e) { console.error(e); }
+  }
+
+  async function resolvePJ(questionId, action) {
+    setPjLoading(l => ({ ...l, [questionId]: action }));
+    try {
+      const res  = await fetch(`${API}/tickets/${ticket.id}/piece-jointe`, {
+        method:"POST", headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({ question_id: questionId, action }),
+      });
+      const data = await res.json();
+      setPjActions(a => ({ ...a, [questionId]: action }));
+      setTicket(t => {
+        const r  = t.result || t;
+        const qs = (r.question_scores||[]).map(q =>
+          q.question_id === questionId ? { ...q, score: data.new_score, pj_action: action } : q
+        );
+        const nr = { ...r, question_scores: qs, global_score: data.global_score };
+        return t.result ? { ...t, result: nr } : nr;
+      });
+    } catch(e) { console.error(e); }
+    setPjLoading(l => ({ ...l, [questionId]: null }));
+  }
+
+  async function uploadFileAndResolve(questionId, file) {
+    setUploading(u => ({ ...u, [questionId]: true }));
+    const fd = new FormData();
+    fd.append("question_id", questionId);
+    fd.append("file", file);
+    try {
+      await fetch(`${API}/tickets/${ticket.id}/attachments`, { method:"POST", body:fd });
+      await fetchAttachments();
+      if (!pjActions[questionId]) await resolvePJ(questionId, "uploaded");
+    } catch(e) { console.error(e); }
+    setUploading(u => ({ ...u, [questionId]: false }));
+  }
+
+  // ── PJ row component (reusable inline) ──────────────────────────────────────
+  function PJRow({ q }) {
+    const action  = pjActions[q.question_id] || q.pj_action;
+    const loading = pjLoading[q.question_id];
+    const resolved = !!action;
+    const isUpload = action === "uploaded";
+    const isWaived = action === "not_needed";
+    const qAtts    = attachments[q.question_id] || [];
+
+    return (
+      <div style={{ margin:"0 0 2px 0", padding:"10px 12px", borderRadius:8,
+        background: isUpload?"rgba(52,211,153,0.05)":isWaived?"rgba(58,95,191,0.05)":"rgba(18,33,75,0.04)",
+        border:     isUpload?"1px solid rgba(52,211,153,0.18)":isWaived?"1px solid rgba(58,95,191,0.18)":"1px dashed rgba(18,33,75,0.22)" }}>
+        {/* Header */}
+        <div style={{ display:"flex", alignItems:"center", gap:6, marginBottom: resolved&&!qAtts.length?0:8 }}>
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none"
+            stroke={isUpload?"#34D399":isWaived?"#3A5FBF":"#12214B"}
+            strokeWidth="2.5" strokeLinecap="round">
+            <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/>
+          </svg>
+          <span style={{ fontSize:10, fontWeight:700, flex:1,
+            color: isUpload?"#34D399":isWaived?"#3A5FBF":"#12214B" }}>
+            {isUpload ? "Document fourni — Score → 4/4" : isWaived ? "Pas de PJ nécessaire — Score → 4/4" : `PJ requise · réf. ${q.piece_jointe}`}
+          </span>
+          {resolved && (
+            <span style={{ padding:"1px 7px", borderRadius:20, fontSize:9, fontWeight:800,
+              background: isUpload?"rgba(52,211,153,0.1)":"rgba(58,95,191,0.1)",
+              color:      isUpload?"#34D399":"#3A5FBF",
+              border:     isUpload?"1px solid rgba(52,211,153,0.2)":"1px solid rgba(58,95,191,0.2)" }}>
+              4/4 · Mature
+            </span>
+          )}
+        </div>
+
+        {/* Files */}
+        {qAtts.map(att => (
+          <div key={att.id} style={{ display:"flex", alignItems:"center", gap:7, padding:"4px 8px", borderRadius:6, marginBottom:5,
+            background:"rgba(52,211,153,0.08)", border:"1px solid rgba(52,211,153,0.18)" }}>
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#34D399" strokeWidth="2" strokeLinecap="round"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="13 2 13 9 20 9"/></svg>
+            <span style={{ flex:1, fontSize:10, color:"#34D399", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{att.filename}</span>
+            <button onClick={()=>window.open(`${API}/tickets/${ticket.id}/attachments/${att.id}/download`,"_blank")}
+              style={{ background:"none", border:"none", color:"#34D399", cursor:"pointer", padding:2, display:"flex" }}>
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            </button>
+            <button onClick={()=>deleteAttachment(att.id)}
+              style={{ background:"none", border:"none", color:"#E30613", cursor:"pointer", padding:2, display:"flex" }}>
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
+            </button>
+          </div>
+        ))}
+
+        {/* Action buttons */}
+        {!resolved && (
+          <div style={{ display:"flex", gap:8, marginTop: qAtts.length>0?6:0 }}>
+            <label style={{ flex:1, display:"flex", alignItems:"center", justifyContent:"center", gap:6, padding:"7px 0", borderRadius:7, cursor:"pointer",
+              background:"rgba(18,33,75,0.06)", border:"1px solid rgba(18,33,75,0.2)", color:"#12214B", fontSize:11, fontWeight:700 }}>
+              {loading==="uploaded"
+                ? <><span style={{ width:6, height:6, borderRadius:"50%", background:"#12214B", display:"inline-block", animation:"blink 1.4s infinite" }} /> Envoi…</>
+                : <><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg> Déposer le document</>}
+              <input type="file" style={{ display:"none" }} disabled={!!loading}
+                onChange={e=>{ if(e.target.files[0]) uploadFileAndResolve(q.question_id, e.target.files[0]); e.target.value=""; }} />
+            </label>
+            <button onClick={()=>resolvePJ(q.question_id,"not_needed")} disabled={!!loading}
+              style={{ flex:1, display:"flex", alignItems:"center", justifyContent:"center", gap:6, padding:"7px 0", borderRadius:7, cursor:"pointer",
+                background:"rgba(58,95,191,0.07)", border:"1px solid rgba(58,95,191,0.2)", color:"#3A5FBF", fontSize:11, fontWeight:700 }}>
+              {loading==="not_needed"
+                ? <><span style={{ width:6, height:6, borderRadius:"50%", background:"#3A5FBF", display:"inline-block", animation:"blink 1.4s infinite" }} /> En cours…</>
+                : <><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><polyline points="20 6 9 17 4 12"/></svg> Pas besoin de PJ</>}
+            </button>
+          </div>
+        )}
+        {resolved && !isWaived && (
+          <label style={{ display:"inline-flex", alignItems:"center", gap:5, padding:"4px 10px", borderRadius:6, cursor:"pointer", marginTop:4,
+            background:"transparent", border:"1px solid rgba(52,211,153,0.2)", color:"#34D399", fontSize:10, fontWeight:600 }}>
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            Ajouter un autre fichier
+            <input type="file" style={{ display:"none" }} onChange={e=>{ if(e.target.files[0]) uploadFile(q.question_id, e.target.files[0]); e.target.value=""; }} />
+          </label>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.2)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:1000 }}>
@@ -772,12 +1329,22 @@ function LiveTrackingModal({ ticketId, onClose, onRefreshList }) {
                         Voir toutes ({result.question_scores.length}) →
                       </button>
                     </div>
-                    {result.question_scores.slice(0,4).map(q => (
-                      <div key={q.question_id} style={{ display:"flex", alignItems:"center", gap:10, padding:"7px 0", borderBottom:"1px solid #F3F4F6" }}>
-                        <span style={{ background:SCORE_BG[q.score]||"#F3F4F6", color:SCORE_COLORS[q.score]||"#9CA3AF", fontSize:10, fontWeight:700, padding:"2px 6px", borderRadius:4, whiteSpace:"nowrap", flexShrink:0, fontFamily:"monospace", border:`1px solid ${(SCORE_COLORS[q.score]||"#9CA3AF")}22` }}>{q.question_id}</span>
-                        <div style={{ flex:1, minWidth:0, color:"#2D3748", fontSize:12, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{q.question}</div>
-                        <ScorePill score={q.score} />
-                        {q.is_showstopper&&<span style={{ color:"#E30613", fontSize:11 }}>⊘</span>}
+                    {result.question_scores.slice(0,6).map(q => (
+                      <div key={q.question_id}>
+                        <div style={{ display:"flex", alignItems:"center", gap:10, padding:"7px 0", borderBottom: q.piece_jointe ? "none" : "1px solid #F3F4F6" }}>
+                          <span style={{ background:SCORE_BG[q.score]||"#F3F4F6", color:SCORE_COLORS[q.score]||"#9CA3AF", fontSize:10, fontWeight:700, padding:"2px 6px", borderRadius:4, whiteSpace:"nowrap", flexShrink:0, fontFamily:"monospace", border:`1px solid ${(SCORE_COLORS[q.score]||"#9CA3AF")}22` }}>{q.question_id}</span>
+                          <div style={{ flex:1, minWidth:0, color:"#2D3748", fontSize:12, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{q.question}</div>
+                          {q.piece_jointe && (
+                            <span style={{ padding:"2px 7px", borderRadius:20, fontSize:9, fontWeight:700, background:"rgba(18,33,75,0.07)", color:"#12214B", border:"1px solid rgba(18,33,75,0.15)", flexShrink:0 }}>PJ requise</span>
+                          )}
+                          <ScorePill score={q.score} />
+                          {q.is_showstopper&&<span style={{ color:"#E30613", fontSize:11 }}>⊘</span>}
+                        </div>
+                        {q.piece_jointe && (
+                          <div style={{ marginBottom:6 }}>
+                            <PJRow q={q} />
+                          </div>
+                        )}
                       </div>
                     ))}
                   </div>
@@ -951,238 +1518,7 @@ function UploadModal({ onClose, onLaunched }) {
   );
 }
 
-// ── Risk level color ─────────────────────────────────────────────────────────
-const RISK_LEVEL_COLORS = {
-  Critical: { color:"#E30613", bg:"#FFF0F0", border:"#FFBCBF" },
-  High:     { color:"#EA580C", bg:"#FFF7ED", border:"#FED7AA" },
-  Medium:   { color:"#D97706", bg:"#FFFBEB", border:"#FDE68A" },
-  Low:      { color:"#16A34A", bg:"#F0FDF4", border:"#BBF7D0" },
-};
 
-function RiskLevelBadge({ level }) {
-  const c = RISK_LEVEL_COLORS[level] || { color:"#6B7280", bg:"#F3F4F6", border:"#E5E7EB" };
-  return (
-    <span style={{ display:"inline-block", padding:"2px 8px", borderRadius:4, background:c.bg, color:c.color, fontSize:11, fontWeight:600, border:`1px solid ${c.border}`, whiteSpace:"nowrap" }}>
-      {level || "—"}
-    </span>
-  );
-}
-
-// ── Full Report tabs ──────────────────────────────────────────────────────────
-function TabOverview({ result, onTabChange }) {
-  const decisionColor = result.final_decision==="Approved" ? "#059669" : result.final_decision==="Rejected" ? "#E30613" : "#D97706";
-  return (
-    <>
-      {/* KPI cards */}
-      <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:10, marginBottom:18 }}>
-        {[
-          { label:"Décision",        value:result.final_decision||"—",                                          color:decisionColor },
-          { label:"Niveau de risque",value:result.overall_score||"—",                                           color:RISK_COLORS[result.overall_score]||"#6B7280" },
-          { label:"Score global",    value:result.global_score!=null?`${result.global_score}/4`:"—",            color:"#12214B" },
-          { label:"Questions",       value:result.question_scores?.length??0,                                   color:"#2D3748" },
-          { label:"Showstoppers",    value:result.showstopper_count??result.showstoppers?.length??0,            color:(result.showstopper_count||result.showstoppers?.length)>0?"#E30613":"#059669" },
-          { label:"Scores ≤ 2",      value:result.question_scores?.filter(q=>q.score<=2).length??0,            color:"#EA580C" },
-          { label:"Risques identifiés",value:result.risks?.length??0,                                          color:"#7C3AED" },
-          { label:"Analyste",        value:result.analyst_decision||"Auto",                                     color:"#6B7280" },
-        ].map(({label,value,color})=>(
-          <div key={label} style={{ background:"#F9FAFB", borderRadius:8, padding:"10px 14px", border:"1px solid #E5E7EB" }}>
-            <div style={{ color:"#9CA3AF", fontSize:9, fontWeight:600, letterSpacing:"0.07em", marginBottom:4 }}>{label.toUpperCase()}</div>
-            <div style={{ color, fontSize:15, fontWeight:600, lineHeight:1.2 }}>{String(value)}</div>
-          </div>
-        ))}
-      </div>
-
-      {/* Decision banner */}
-      {result.final_decision && (
-        <div style={{ background:result.final_decision==="Rejected"?"#FFF0F0":result.final_decision==="Approved"?"#ECFDF5":"#FFFBEB", border:`1px solid ${result.final_decision==="Rejected"?"#FFBCBF":result.final_decision==="Approved"?"#A7F3D0":"#FDE68A"}`, borderRadius:8, padding:"12px 16px", marginBottom:16, display:"flex", alignItems:"center", gap:10 }}>
-          <span style={{ fontSize:18 }}>{result.final_decision==="Rejected"?"🚫":result.final_decision==="Approved"?"✅":"⏳"}</span>
-          <div>
-            <div style={{ fontWeight:600, fontSize:13, color:decisionColor }}>Décision finale : {result.final_decision}</div>
-            {result.overall_score && <div style={{ fontSize:12, color:"#6B7280", marginTop:2 }}>Niveau de risque global : {result.overall_score}</div>}
-          </div>
-        </div>
-      )}
-
-      {/* Executive summary */}
-      {result.executive_summary && (
-        <div style={{ background:"#F9FAFB", borderRadius:8, padding:"14px 16px", marginBottom:16, border:"1px solid #E5E7EB" }}>
-          <div style={{ color:"#9CA3AF", fontSize:10, fontWeight:600, letterSpacing:"0.07em", marginBottom:8 }}>RÉSUMÉ EXÉCUTIF</div>
-          <p style={{ color:"#2D3748", fontSize:13, lineHeight:1.75, margin:0 }}>{result.executive_summary}</p>
-        </div>
-      )}
-
-      {/* Showstoppers preview */}
-      {result.showstoppers?.length > 0 && (
-        <div style={{ marginBottom:16 }}>
-          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:8 }}>
-            <div style={{ color:"#E30613", fontSize:10, fontWeight:600, letterSpacing:"0.07em" }}>SHOWSTOPPERS ({result.showstoppers.length})</div>
-            <button onClick={()=>onTabChange("showstoppers")} style={{ background:"none", border:"none", color:"#12214B", fontSize:11, cursor:"pointer", fontWeight:500 }}>Voir le détail →</button>
-          </div>
-          {result.showstoppers.map((s,i)=>(
-            <div key={i} style={{ background:"#FFF0F0", borderRadius:6, padding:"8px 12px", marginBottom:5, color:"#8B0008", fontSize:12, border:"1px solid #FFBCBF" }}><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" style={{marginRight:5,flexShrink:0,verticalAlign:"middle"}}><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>{s}</div>
-          ))}
-        </div>
-      )}
-
-      {/* Score distribution */}
-      {result.question_scores?.length > 0 && (() => {
-        const counts = result.question_scores.reduce((a,q)=>{a[q.score]=(a[q.score]||0)+1;return a;},{});
-        const total  = result.question_scores.length;
-        return (
-          <div style={{ background:"#F9FAFB", borderRadius:8, padding:"14px 16px", marginBottom:16, border:"1px solid #E5E7EB" }}>
-            <div style={{ color:"#9CA3AF", fontSize:10, fontWeight:600, letterSpacing:"0.07em", marginBottom:10 }}>DISTRIBUTION DES SCORES</div>
-            <div style={{ display:"flex", gap:4, height:8, borderRadius:4, overflow:"hidden", marginBottom:10 }}>
-              {[4,3,2,1].map(s => counts[s] ? (
-                <div key={s} style={{ flex:counts[s], background:SCORE_COLORS[s], height:"100%" }} title={`${s}/4 : ${counts[s]}`} />
-              ) : null)}
-            </div>
-            <div style={{ display:"flex", gap:16, flexWrap:"wrap" }}>
-              {[4,3,2,1].filter(s=>counts[s]).map(s=>(
-                <div key={s} style={{ display:"flex", alignItems:"center", gap:5 }}>
-                  <div style={{ width:8, height:8, borderRadius:2, background:SCORE_COLORS[s] }} />
-                  <span style={{ color:"#2D3748", fontSize:12 }}>{counts[s]} {SCORE_LABELS[s]}</span>
-                  <span style={{ color:"#9CA3AF", fontSize:11 }}>({Math.round(counts[s]/total*100)}%)</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        );
-      })()}
-
-      {/* Risks preview */}
-      {result.risks?.length > 0 && (
-        <div>
-          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:8 }}>
-            <div style={{ color:"#9CA3AF", fontSize:10, fontWeight:600, letterSpacing:"0.07em" }}>RISQUES IDENTIFIÉS ({result.risks.length})</div>
-            <button onClick={()=>onTabChange("risks")} style={{ background:"none", border:"none", color:"#12214B", fontSize:11, cursor:"pointer", fontWeight:500 }}>Voir tous →</button>
-          </div>
-          {result.risks.slice(0,3).map((r,i)=>(
-            <div key={i} style={{ display:"flex", alignItems:"center", gap:10, padding:"8px 0", borderBottom:"1px solid #F3F4F6" }}>
-              <RiskLevelBadge level={r.level} />
-              <div style={{ flex:1, color:"#2D3748", fontSize:12, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{r.title}</div>
-            </div>
-          ))}
-        </div>
-      )}
-    </>
-  );
-}
-
-function TabQuestions({ questions }) {
-  return <QuestionList questions={questions} />;
-}
-
-function TabRisks({ risks }) {
-  const [expanded, setExpanded] = useState(null);
-  if (!risks?.length) return <div style={{ padding:"32px 0", textAlign:"center", color:"#9CA3AF", fontSize:13 }}>Aucun risque documenté</div>;
-
-  const byLevel = ["Critical","High","Medium","Low"];
-  const grouped = byLevel.reduce((acc,l)=>{ acc[l]=risks.filter(r=>r.level===l); return acc; },{});
-
-  return (
-    <div>
-      {byLevel.filter(l=>grouped[l]?.length>0).map(level=>(
-        <div key={level} style={{ marginBottom:20 }}>
-          <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:8 }}>
-            <RiskLevelBadge level={level} />
-            <span style={{ color:"#6B7280", fontSize:11 }}>{grouped[level].length} risque{grouped[level].length>1?"s":""}</span>
-          </div>
-          {grouped[level].map((r,i)=>{
-            const isEx = expanded===`${level}-${i}`;
-            const c = RISK_LEVEL_COLORS[level] || { color:"#6B7280", bg:"#F9FAFB", border:"#E5E7EB" };
-            return (
-              <div key={i} style={{ border:`1px solid ${isEx?c.border:"#E5E7EB"}`, borderRadius:8, marginBottom:6, overflow:"hidden", background:isEx?c.bg:"#fff", transition:"background 0.15s" }}>
-                <div onClick={()=>setExpanded(isEx?null:`${level}-${i}`)}
-                  style={{ display:"flex", alignItems:"center", gap:10, padding:"10px 14px", cursor:"pointer" }}>
-                  <div style={{ width:3, height:20, borderRadius:2, background:c.color, flexShrink:0 }} />
-                  <div style={{ flex:1, fontWeight:500, fontSize:13, color:"#0F172A" }}>{r.title}</div>
-                  {r.question_ids && <span style={{ color:"#9CA3AF", fontSize:10, fontFamily:"monospace", flexShrink:0 }}>{r.question_ids}</span>}
-                  <span style={{ color:"#9CA3AF", fontSize:10, transform:isEx?"rotate(180deg)":"none", display:"inline-block", transition:"transform 0.2s", flexShrink:0 }}>▾</span>
-                </div>
-                {isEx && (
-                  <div style={{ padding:"0 14px 14px 27px", borderTop:`1px solid ${c.border}` }}>
-                    {r.description && (
-                      <div style={{ marginTop:10, marginBottom:10 }}>
-                        <div style={{ fontSize:10, fontWeight:600, color:"#9CA3AF", letterSpacing:"0.07em", marginBottom:4 }}>DESCRIPTION</div>
-                        <p style={{ fontSize:12, color:"#2D3748", lineHeight:1.7, margin:0 }}>{r.description}</p>
-                      </div>
-                    )}
-                    {r.recommendation && (
-                      <div style={{ background:"#EEF1F8", borderRadius:6, padding:"8px 12px", border:"1px solid #B8C3DE" }}>
-                        <div style={{ fontSize:10, fontWeight:600, color:"#0E1A3A", letterSpacing:"0.07em", marginBottom:4 }}>RECOMMANDATION</div>
-                        <p style={{ fontSize:12, color:"#0E1A3A", lineHeight:1.7, margin:0 }}>{r.recommendation}</p>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function TabShowstoppers({ result }) {
-  const questions  = result.question_scores?.filter(q=>q.is_showstopper) || [];
-  const showstoppers = result.showstoppers || [];
-  if (!questions.length && !showstoppers.length)
-    return <div style={{ padding:"32px 0", textAlign:"center", color:"#9CA3AF", fontSize:13 }}>Aucun showstopper</div>;
-
-  return (
-    <div>
-      <div style={{ background:"#FFF0F0", border:"1px solid #FFBCBF", borderRadius:8, padding:"12px 16px", marginBottom:20, display:"flex", gap:10, alignItems:"flex-start" }}>
-        <span style={{ fontSize:20, flexShrink:0 }}>⊘</span>
-        <div>
-          <div style={{ fontWeight:600, fontSize:13, color:"#E30613", marginBottom:4 }}>{questions.length} problème{questions.length>1?"s":""} bloquant{questions.length>1?"s":""}</div>
-          <div style={{ fontSize:12, color:"#8B0008", lineHeight:1.6 }}>Ces points doivent impérativement être résolus avant toute approbation du fournisseur.</div>
-        </div>
-      </div>
-
-      {questions.map(q=>{
-        const col = SCORE_COLORS[q.score]||"#9CA3AF";
-        return (
-          <div key={q.question_id} style={{ border:"1px solid #FFBCBF", borderRadius:8, marginBottom:10, overflow:"hidden", background:"#fff" }}>
-            <div style={{ display:"flex", alignItems:"center", gap:10, padding:"10px 14px", background:"#FFF0F0", borderBottom:"1px solid #FFBCBF" }}>
-              <span style={{ background:SCORE_BG[q.score]||"#F3F4F6", color:col, fontSize:10, fontWeight:700, padding:"2px 6px", borderRadius:4, fontFamily:"monospace", border:`1px solid ${col}22`, flexShrink:0 }}>{q.question_id}</span>
-              <div style={{ flex:1, fontWeight:500, fontSize:12, color:"#0F172A" }}>{q.question}</div>
-              <ScorePill score={q.score} />
-            </div>
-            <div style={{ padding:"10px 14px" }}>
-              {q.response && (
-                <div style={{ marginBottom:8 }}>
-                  <div style={{ fontSize:10, fontWeight:600, color:"#9CA3AF", letterSpacing:"0.07em", marginBottom:3 }}>RÉPONSE FOURNISSEUR</div>
-                  <p style={{ fontSize:12, color:"#2D3748", lineHeight:1.6, margin:0 }}>{q.response}</p>
-                </div>
-              )}
-              {q.justification && (
-                <div style={{ marginBottom:8 }}>
-                  <div style={{ fontSize:10, fontWeight:600, color:"#9CA3AF", letterSpacing:"0.07em", marginBottom:3 }}>JUSTIFICATION DU SCORE</div>
-                  <p style={{ fontSize:12, color:"#2D3748", lineHeight:1.6, margin:0 }}>{q.justification}</p>
-                </div>
-              )}
-              {q.flag_reason && (
-                <div style={{ background:"#FFF0F0", borderRadius:5, padding:"6px 10px", border:"1px solid #FFBCBF" }}>
-                  <div style={{ fontSize:10, fontWeight:600, color:"#E30613", letterSpacing:"0.07em", marginBottom:2 }}>RAISON DU BLOCAGE</div>
-                  <p style={{ fontSize:12, color:"#8B0008", margin:0 }}>{q.flag_reason}</p>
-                </div>
-              )}
-              {q.follow_up_question && (
-                <div style={{ marginTop:8, background:"#EEF1F8", borderRadius:5, padding:"6px 10px", border:"1px solid #B8C3DE" }}>
-                  <div style={{ fontSize:10, fontWeight:600, color:"#0E1A3A", letterSpacing:"0.07em", marginBottom:2 }}>QUESTION DE SUIVI</div>
-                  <p style={{ fontSize:12, color:"#0E1A3A", margin:0 }}>❓ {q.follow_up_question}</p>
-                </div>
-              )}
-            </div>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
-// ── Detail Modal (lecture seule, rapport complet) ─────────────────────────────
 function DetailModal({ ticket: initialTicket, onClose, onDone, dark=true }) {
   const [ticket, setTicket]     = useState(initialTicket);
   const [fetching, setFetching] = useState(true);
@@ -1224,6 +1560,87 @@ function DetailModal({ ticket: initialTicket, onClose, onDone, dark=true }) {
       .catch(() => setFetching(false));
   }, [initialTicket.id]);
 
+  const [attachments, setAttachments] = useState({});   // { question_id: [att, ...] }
+  const [uploading, setUploading]     = useState({});   // { question_id: bool }
+
+  const fetchAttachments = useCallback(async () => {
+    try {
+      const res  = await fetch(`${API}/tickets/${initialTicket.id}/attachments`);
+      const list = await res.json();
+      const grouped = list.reduce((acc, a) => {
+        if (!acc[a.question_id]) acc[a.question_id] = [];
+        acc[a.question_id].push(a);
+        return acc;
+      }, {});
+      setAttachments(grouped);
+    } catch(e) { console.error(e); }
+  }, [initialTicket.id]);
+
+  useEffect(() => { fetchAttachments(); }, [fetchAttachments]);
+
+  async function uploadFile(questionId, file) {
+    setUploading(u => ({ ...u, [questionId]: true }));
+    const fd = new FormData();
+    fd.append("question_id", questionId);
+    fd.append("file", file);
+    try {
+      await fetch(`${API}/tickets/${initialTicket.id}/attachments`, { method:"POST", body:fd });
+      await fetchAttachments();
+    } catch(e) { console.error(e); }
+    setUploading(u => ({ ...u, [questionId]: false }));
+  }
+
+  async function deleteAttachment(attId) {
+    try {
+      await fetch(`${API}/tickets/${initialTicket.id}/attachments/${attId}`, { method:"DELETE" });
+      await fetchAttachments();
+    } catch(e) { console.error(e); }
+  }
+
+  // pjActions: { [question_id]: "uploaded"|"not_needed"|null }
+  const [pjActions, setPjActions]   = useState({});
+  const [pjLoading, setPjLoading]   = useState({});
+
+  async function resolvePJ(questionId, action, comment="") {
+    setPjLoading(l => ({ ...l, [questionId]: action }));
+    try {
+      const res = await fetch(`${API}/tickets/${initialTicket.id}/piece-jointe`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ question_id: questionId, action, comment }),
+      });
+      const data = await res.json();
+      setPjActions(a => ({ ...a, [questionId]: action }));
+      // Update local score immediately
+      setTicket(t => {
+        const result = t.result || t;
+        const qs = (result.question_scores || []).map(q =>
+          q.question_id === questionId ? { ...q, score: data.new_score, pj_action: action } : q
+        );
+        const newResult = { ...result, question_scores: qs, global_score: data.global_score };
+        return t.result ? { ...t, result: newResult } : newResult;
+      });
+    } catch(e) { console.error(e); }
+    setPjLoading(l => ({ ...l, [questionId]: null }));
+  }
+
+  // Upload + auto-resolve
+  async function uploadFileAndResolve(questionId, file) {
+    setUploading(u => ({ ...u, [questionId]: true }));
+    const fd = new FormData();
+    fd.append("question_id", questionId);
+    fd.append("file", file);
+    try {
+      await fetch(`${API}/tickets/${initialTicket.id}/attachments`, { method:"POST", body:fd });
+      await fetchAttachments();
+      // Only resolve if not already done
+      if (!pjActions[questionId]) {
+        await resolvePJ(questionId, "uploaded");
+      }
+    } catch(e) { console.error(e); }
+    setUploading(u => ({ ...u, [questionId]: false }));
+  }
+
   const result       = ticket.result || ticket;
   const isValidation = ticket.status === "waiting_validation";
   const hasResult    = !!(result.question_scores?.length > 0 || result.final_decision || result.executive_summary);
@@ -1234,11 +1651,14 @@ function DetailModal({ ticket: initialTicket, onClose, onDone, dark=true }) {
   const showstoppers = result.question_scores?.filter(q => q.is_showstopper) || [];
   const ssCount      = result.showstopper_count || showstoppers.length || 0;
 
+  const pjTotal   = (result.question_scores||[]).filter(q=>q.piece_jointe).length;
+  const pjDone    = Object.values(attachments).flat().length;
   const tabs = [
-    { key:"overview", label:"Résumé" },
-    ...(result.question_scores?.length > 0 ? [{ key:"questions", label:`Questions (${result.question_scores.length})` }] : []),
-    ...(result.risks?.length > 0           ? [{ key:"risks",     label:`Risques (${result.risks.length})` }] : []),
-    ...(ssCount > 0 ? [{ key:"showstoppers", label:`Showstoppers (${ssCount})`, red:true }] : []),
+    { key:"overview",     label:"Résumé" },
+    ...(result.question_scores?.length > 0 ? [{ key:"questions",    label:`Questions (${result.question_scores.length})` }] : []),
+    ...(result.risks?.length > 0           ? [{ key:"risks",        label:`Risques (${result.risks.length})` }] : []),
+    ...(ssCount > 0                        ? [{ key:"showstoppers", label:`Showstoppers (${ssCount})`, red:true }] : []),
+    ...(result.question_scores?.length > 0 ? [{ key:"attachments",  label: pjTotal > 0 ? `Pièces jointes (${pjDone}/${pjTotal})` : "Pièces jointes", yellow: true }] : []),
   ];
 
   async function send(approved) {
@@ -1264,7 +1684,7 @@ function DetailModal({ ticket: initialTicket, onClose, onDone, dark=true }) {
 
   function OverviewTab() {
     const decColor = isApproved ? "#34D399" : isRejected ? "#F87171" : D.muted;
-    const riskColor = { Critical:"#F87171", High:"#F97316", Medium:"#FBBF24", Low:"#34D399" }[result.overall_score] || D.muted;
+    const riskColor = { Critical:"#F87171", High:"#F97316", Medium:"#12214B", Low:"#34D399" }[result.overall_score] || D.muted;
     const scores    = result.question_scores || [];
     const counts    = scores.reduce((a,q)=>{ a[q.score]=(a[q.score]||0)+1; return a; },{});
     const total     = scores.length || 1;
@@ -1290,16 +1710,24 @@ function DetailModal({ ticket: initialTicket, onClose, onDone, dark=true }) {
         )}
 
         {/* KPI grid 2x4 */}
-        <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:10, marginBottom:20 }}>
-          <KpiCard label="Décision"        value={decision}                                       color={decColor} />
-          <KpiCard label="Niveau de risque" value={result.overall_score}                          color={riskColor} />
-          <KpiCard label="Score global"    value={result.global_score!=null?`${result.global_score}/4`:null} color="#7A96D4" />
-          <KpiCard label="Questions"       value={result.question_scores?.length}                 color={D.muted} />
-          <KpiCard label="Showstoppers"    value={ssCount}                                        color={ssCount>0?"#F87171":"#34D399"} />
-          <KpiCard label="Scores ≤ 2"     value={scores.filter(q=>q.score<=2).length||null}      color="#F97316" />
-          <KpiCard label="Risques identifiés" value={result.risks?.length}                        color="#7A96D4" />
-          <KpiCard label="Analyste"        value={ticket.validated_by==="auto"?"Auto":ticket.analyst} color={D.muted} />
-        </div>
+        {(() => {
+          const pjCount = (result.question_scores||[]).filter(q=>q.piece_jointe).length;
+          const pjDone  = pjCount > 0 ? Object.values(attachments).flat().length : 0;
+          return (
+            <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:10, marginBottom:20 }}>
+              <KpiCard label="Décision"        value={decision}                                       color={decColor} />
+              <KpiCard label="Niveau de risque" value={result.overall_score}                          color={riskColor} />
+              <KpiCard label="Score global"    value={result.global_score!=null?`${result.global_score}/4`:null} color="#7A96D4" />
+              <KpiCard label="Questions"       value={result.question_scores?.length}                 color={D.muted} />
+              <KpiCard label="Showstoppers"    value={ssCount}                                        color={ssCount>0?"#F87171":"#34D399"} />
+              <KpiCard label="Scores ≤ 2"     value={scores.filter(q=>q.score<=2).length||null}      color="#F97316" />
+              <KpiCard label="Risques identifiés" value={result.risks?.length}                        color="#7A96D4" />
+              {pjCount > 0
+                ? <KpiCard label="Pièces jointes" value={`${pjDone}/${pjCount}`} color={pjDone>=pjCount?"#34D399":"#12214B"} />
+                : <KpiCard label="Analyste" value={ticket.validated_by==="auto"?"Auto":ticket.analyst} color={D.muted} />}
+            </div>
+          );
+        })()}
 
         {/* Executive summary */}
         {result.executive_summary && (
@@ -1308,6 +1736,46 @@ function DetailModal({ ticket: initialTicket, onClose, onDone, dark=true }) {
             <p style={{ color:D.text, fontSize:13, lineHeight:1.75, margin:0 }}>{result.executive_summary}</p>
           </div>
         )}
+
+        {/* Pièces jointes manquantes */}
+        {(() => {
+          const pjQs = (result.question_scores||[]).filter(q=>q.piece_jointe);
+          const missing = pjQs.filter(q=>!(attachments[q.question_id]?.length>0));
+          if (!pjQs.length) return null;
+          return (
+            <div style={{ marginBottom:18 }}>
+              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:10 }}>
+                <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+                  <div style={{ width:3, height:16, borderRadius:2, background:"#12214B" }} />
+                  <span style={{ fontSize:13, fontWeight:700, color:"#12214B" }}>PIÈCES JOINTES ({pjQs.length})</span>
+                  {missing.length > 0
+                    ? <span style={{ padding:"2px 8px", borderRadius:20, background:"rgba(18,33,75,0.1)", color:"#12214B", fontSize:10, fontWeight:700 }}>{missing.length} manquante{missing.length>1?"s":""}</span>
+                    : <span style={{ padding:"2px 8px", borderRadius:20, background:"rgba(52,211,153,0.12)", color:"#34D399", fontSize:10, fontWeight:700 }}>Complètes ✓</span>}
+                </div>
+                <button onClick={()=>setTab("questions")} style={{ background:"none", border:"none", color:"#12214B", fontSize:11, fontWeight:600, cursor:"pointer" }}>Gérer →</button>
+              </div>
+              <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(220px,1fr))", gap:6 }}>
+                {pjQs.map(q => {
+                  const atts = attachments[q.question_id]||[];
+                  const done = atts.length > 0;
+                  return (
+                    <div key={q.question_id} style={{ display:"flex", alignItems:"center", gap:8, padding:"7px 10px", borderRadius:8,
+                      background: done?"rgba(52,211,153,0.06)":"rgba(18,33,75,0.06)",
+                      border: done?"1px solid rgba(52,211,153,0.15)":"1px solid rgba(251,191,36,0.2)" }}>
+                      {done
+                        ? <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#34D399" strokeWidth="2.5" strokeLinecap="round"><polyline points="20 6 9 17 4 12"/></svg>
+                        : <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#12214B" strokeWidth="2.5" strokeLinecap="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>}
+                      <span style={{ fontSize:10, fontWeight:700, color:done?"#34D399":"#12214B", fontFamily:"monospace" }}>{q.question_id}</span>
+                      <span style={{ fontSize:10, color:D.muted, flex:1, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+                        {done ? `${atts.length} fichier${atts.length>1?"s":""}` : "En attente"}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })()}
 
         {/* Showstoppers preview */}
         {ssCount > 0 && result.showstoppers?.length > 0 && (
@@ -1362,14 +1830,147 @@ function DetailModal({ ticket: initialTicket, onClose, onDone, dark=true }) {
               <button onClick={()=>setTab("risks")} style={{ background:"none", border:"none", color:"#7A96D4", fontSize:11, fontWeight:600, cursor:"pointer" }}>Voir tous →</button>
             </div>
             {result.risks.slice(0,3).map((r,i) => {
-              const rc = { Critical:"#F87171", High:"#F97316", Medium:"#FBBF24", Low:"#34D399" }[r.level]||D.muted;
+              const rc = { Critical:"#F87171", High:"#F97316", Medium:"#12214B", Low:"#34D399" }[r.level]||D.muted;
               return (
                 <div key={i} style={{ display:"flex", alignItems:"center", gap:10, padding:"9px 0", borderBottom:`1px solid ${D.border}` }}>
-                  <span style={{ padding:"2px 8px", borderRadius:6, fontSize:10, fontWeight:700, background:`rgba(${rc==="#F87171"?"248,113,113":rc==="#F97316"?"249,115,22":rc==="#FBBF24"?"251,191,36":"52,211,153"},0.12)`, color:rc, flexShrink:0 }}>{r.level}</span>
+                  <span style={{ padding:"2px 8px", borderRadius:6, fontSize:10, fontWeight:700, background:`rgba(${rc==="#F87171"?"248,113,113":rc==="#F97316"?"249,115,22":rc==="#12214B"?"251,191,36":"52,211,153"},0.12)`, color:rc, flexShrink:0 }}>{r.level}</span>
                   <span style={{ color:D.text, fontSize:12, flex:1, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{r.title}</span>
                 </div>
               );
             })}
+          </div>
+        )}
+
+        {/* Questions preview with PJ upload */}
+        {scores.length > 0 && (
+          <div style={{ marginTop:20 }}>
+            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12 }}>
+              <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+                <div style={{ width:3, height:16, borderRadius:2, background:"#E30613" }} />
+                <span style={{ fontSize:13, fontWeight:700, color:D.text }}>APERÇU DES QUESTIONS</span>
+              </div>
+              <button onClick={()=>setTab("questions")} style={{ background:"none", border:"none", color:D.muted, fontSize:11, fontWeight:600, cursor:"pointer" }}>
+                Voir toutes ({scores.length}) →
+              </button>
+            </div>
+            <div style={{ border:`1px solid ${D.border}`, borderRadius:12, overflow:"hidden" }}>
+              {scores.slice(0, 6).map((q, i) => {
+                const SCORE_C  = { 4:"#34D399", 3:"#FBBF24", 2:"#F97316", 1:"#F87171" };
+                const SCORE_BG = { 4:"rgba(52,211,153,0.1)", 3:"rgba(251,191,36,0.1)", 2:"rgba(249,115,22,0.1)", 1:"rgba(248,113,113,0.1)" };
+                const LABELS   = { 1:"Non-conforme", 2:"Partiel", 3:"Conforme", 4:"Mature" };
+                const c        = SCORE_C[q.score] || D.faint;
+                const hasPJ    = !!q.piece_jointe;
+                const qAtts    = attachments[q.question_id] || [];
+                const pjDoneQ  = qAtts.length > 0;
+                return (
+                  <div key={q.question_id} style={{ borderBottom: i < Math.min(scores.length,6)-1 ? `1px solid ${D.border}` : "none" }}>
+                    {/* Main question row */}
+                    <div style={{ display:"flex", alignItems:"center", gap:10, padding:"10px 14px" }}>
+                      <span style={{ background:SCORE_BG[q.score]||"rgba(255,255,255,0.05)", color:c, fontSize:9, fontWeight:800, padding:"2px 6px", borderRadius:4, whiteSpace:"nowrap", flexShrink:0, fontFamily:"monospace", border:`1px solid ${c}22` }}>{q.question_id}</span>
+                      <div style={{ flex:1, minWidth:0, color:D.text, fontSize:12, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{q.question}</div>
+                      {/* PJ status chip */}
+                      {hasPJ && (
+                        <div style={{ flexShrink:0, display:"flex", alignItems:"center", gap:4, padding:"2px 8px", borderRadius:20, fontSize:10, fontWeight:700,
+                          background: pjDoneQ ? "rgba(52,211,153,0.1)" : "rgba(18,33,75,0.07)",
+                          color:       pjDoneQ ? "#34D399" : "#12214B",
+                          border:      pjDoneQ ? "1px solid rgba(52,211,153,0.2)" : "1px solid rgba(251,191,36,0.25)" }}>
+                          <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                            <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/>
+                          </svg>
+                          {pjDoneQ ? `${qAtts.length} doc.` : "PJ requise"}
+                        </div>
+                      )}
+                      <span style={{ background:SCORE_BG[q.score], color:c, fontSize:10, fontWeight:700, padding:"2px 7px", borderRadius:6, flexShrink:0, border:`1px solid ${c}33` }}>{q.score}/4 · {LABELS[q.score]}</span>
+                      {q.is_showstopper && <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#F87171" strokeWidth="2.5" strokeLinecap="round" style={{flexShrink:0}}><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>}
+                    </div>
+                    {/* PJ action zone — upload OR declare not needed */}
+                    {hasPJ && (() => {
+                      const action   = pjActions[q.question_id] || q.pj_action;
+                      const loading  = pjLoading[q.question_id];
+                      const resolved = !!action;
+                      const isUpload = action === "uploaded";
+                      const isWaived = action === "not_needed";
+
+                      return (
+                        <div style={{ margin:"0 14px 10px 14px", padding:"12px 14px", borderRadius:10,
+                          background: isUpload ? "rgba(52,211,153,0.05)" : isWaived ? "rgba(122,150,212,0.05)" : "rgba(18,33,75,0.04)",
+                          border:     isUpload ? "1px solid rgba(52,211,153,0.2)" : isWaived ? "1px solid rgba(122,150,212,0.2)" : "1px dashed rgba(18,33,75,0.25)" }}>
+
+                          {/* Header */}
+                          <div style={{ display:"flex", alignItems:"center", gap:6, marginBottom:10 }}>
+                            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke={isUpload?"#34D399":isWaived?"#7A96D4":"#12214B"} strokeWidth="2.5" strokeLinecap="round">
+                              <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/>
+                            </svg>
+                            <span style={{ fontSize:10, fontWeight:700, color: isUpload?"#34D399":isWaived?"#7A96D4":"#12214B" }}>
+                              {isUpload ? "Document fourni — Score → 4/4" : isWaived ? "Pas de PJ nécessaire — Score → 4/4" : `Pièce jointe · réf. ${q.piece_jointe}`}
+                            </span>
+                            {resolved && (
+                              <span style={{ marginLeft:"auto", padding:"1px 7px", borderRadius:20, fontSize:9, fontWeight:800,
+                                background: isUpload?"rgba(52,211,153,0.12)":"rgba(122,150,212,0.12)",
+                                color:      isUpload?"#34D399":"#7A96D4",
+                                border:     isUpload?"1px solid rgba(52,211,153,0.2)":"1px solid rgba(122,150,212,0.2)" }}>
+                                4/4 · Mature
+                              </span>
+                            )}
+                          </div>
+
+                          {/* Uploaded files list */}
+                          {qAtts.map(att => (
+                            <div key={att.id} style={{ display:"flex", alignItems:"center", gap:7, padding:"5px 9px", borderRadius:7, marginBottom:6,
+                              background:"rgba(52,211,153,0.08)", border:"1px solid rgba(52,211,153,0.18)" }}>
+                              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#34D399" strokeWidth="2" strokeLinecap="round"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="13 2 13 9 20 9"/></svg>
+                              <span style={{ flex:1, fontSize:11, color:"#34D399", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{att.filename}</span>
+                              <button onClick={()=>window.open(`${API}/tickets/${initialTicket.id}/attachments/${att.id}/download`,"_blank")}
+                                style={{ background:"none", border:"none", color:"#34D399", cursor:"pointer", padding:2, display:"flex" }}>
+                                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                              </button>
+                              <button onClick={()=>deleteAttachment(att.id)}
+                                style={{ background:"none", border:"none", color:"#F87171", cursor:"pointer", padding:2, display:"flex" }}>
+                                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
+                              </button>
+                            </div>
+                          ))}
+
+                          {/* Actions — show if not resolved yet, or allow change */}
+                          {!resolved && (
+                            <div style={{ display:"flex", gap:8, marginTop: qAtts.length>0?8:0 }}>
+                              {/* Upload */}
+                              <label style={{ flex:1, display:"flex", alignItems:"center", justifyContent:"center", gap:6, padding:"8px 0", borderRadius:8, cursor:"pointer",
+                                background:"rgba(18,33,75,0.07)", border:"1px solid rgba(251,191,36,0.3)", color:"#12214B", fontSize:11, fontWeight:700, transition:"all 0.15s" }}>
+                                {loading==="uploaded"
+                                  ? <><span style={{ width:7, height:7, borderRadius:"50%", background:"#12214B", display:"inline-block", animation:"blink 1.4s infinite" }} /> Envoi…</>
+                                  : <><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg> Déposer le document</>}
+                                <input type="file" style={{ display:"none" }} disabled={!!loading}
+                                  onChange={e=>{ if(e.target.files[0]) uploadFileAndResolve(q.question_id, e.target.files[0]); e.target.value=""; }} />
+                              </label>
+                              {/* Not needed */}
+                              <button onClick={()=>resolvePJ(q.question_id, "not_needed")} disabled={!!loading}
+                                style={{ flex:1, display:"flex", alignItems:"center", justifyContent:"center", gap:6, padding:"8px 0", borderRadius:8, cursor:"pointer",
+                                  background:"rgba(122,150,212,0.08)", border:"1px solid rgba(122,150,212,0.2)", color:"#7A96D4", fontSize:11, fontWeight:700 }}>
+                                {loading==="not_needed"
+                                  ? <><span style={{ width:7, height:7, borderRadius:"50%", background:"#7A96D4", display:"inline-block", animation:"blink 1.4s infinite" }} /> En cours…</>
+                                  : <><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><polyline points="20 6 9 17 4 12"/></svg> Pas besoin de PJ</>}
+                              </button>
+                            </div>
+                          )}
+
+                          {/* If resolved — show change option */}
+                          {resolved && !isWaived && (
+                            <label style={{ display:"inline-flex", alignItems:"center", gap:5, padding:"4px 10px", borderRadius:6, cursor:"pointer",
+                              background:"transparent", border:`1px solid rgba(52,211,153,0.2)`, color:"#34D399", fontSize:10, fontWeight:600, marginTop: qAtts.length>0?6:0 }}>
+                              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                              Ajouter un autre fichier
+                              <input type="file" style={{ display:"none" }}
+                                onChange={e=>{ if(e.target.files[0]) { uploadFile(q.question_id, e.target.files[0]); } e.target.value=""; }} />
+                            </label>
+                          )}
+                        </div>
+                      );
+                    })()}
+                  </div>
+                );
+              })}
+            </div>
           </div>
         )}
       </div>
@@ -1428,7 +2029,7 @@ function DetailModal({ ticket: initialTicket, onClose, onDone, dark=true }) {
                       <div style={{ marginTop:8 }}>
                         {q.response && <div style={{ marginBottom:6 }}>
                           <div style={{ fontSize:9, fontWeight:700, color:D.faint, letterSpacing:"0.08em", marginBottom:3 }}>RÉPONSE FOURNISSEUR</div>
-                          <div style={{ color:D.muted, fontSize:11, lineHeight:1.6, borderLeft:`2px solid rgba(${c==="#34D399"?"52,211,153":c==="#FBBF24"?"251,191,36":c==="#F97316"?"249,115,22":"248,113,113"},0.3)`, paddingLeft:8 }}>{q.response}</div>
+                          <div style={{ color:D.muted, fontSize:11, lineHeight:1.6, borderLeft:`2px solid rgba(${c==="#34D399"?"52,211,153":c==="#12214B"?"251,191,36":c==="#F97316"?"249,115,22":"248,113,113"},0.3)`, paddingLeft:8 }}>{q.response}</div>
                         </div>}
                         {q.justification && <div style={{ marginBottom:6 }}>
                           <div style={{ fontSize:9, fontWeight:700, color:D.faint, letterSpacing:"0.08em", marginBottom:3 }}>JUSTIFICATION</div>
@@ -1438,6 +2039,46 @@ function DetailModal({ ticket: initialTicket, onClose, onDone, dark=true }) {
                           <span style={{ fontSize:9, fontWeight:700, color:"#7A96D4" }}>❓ </span>
                           <span style={{ fontSize:11, color:"#7A96D4" }}>{q.follow_up_question}</span>
                         </div>}
+
+                        {/* ── Pièce jointe ── */}
+                        {q.piece_jointe && (
+                          <div style={{ marginTop:8, background:"rgba(18,33,75,0.06)", border:"1px solid rgba(251,191,36,0.2)", borderRadius:8, padding:"10px 12px" }}>
+                            <div style={{ display:"flex", alignItems:"center", gap:6, marginBottom:8 }}>
+                              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#12214B" strokeWidth="2.5" strokeLinecap="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+                              <span style={{ fontSize:10, fontWeight:700, color:"#12214B", letterSpacing:"0.08em" }}>PIÈCE JOINTE REQUISE</span>
+                            </div>
+                            <div style={{ fontSize:11, color:D.muted, marginBottom:10, lineHeight:1.5 }}>{q.piece_jointe}</div>
+
+                            {/* Existing attachments */}
+                            {(attachments[q.question_id]||[]).map(att => (
+                              <div key={att.id} style={{ display:"flex", alignItems:"center", gap:8, padding:"5px 8px", borderRadius:6, background:"rgba(18,33,75,0.07)", marginBottom:5 }}>
+                                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#12214B" strokeWidth="2" strokeLinecap="round"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="13 2 13 9 20 9"/></svg>
+                                <span style={{ flex:1, fontSize:11, color:"#12214B", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{att.filename}</span>
+                                <button
+                                  onClick={e=>{e.stopPropagation();window.open(`${API}/tickets/${initialTicket.id}/attachments/${att.id}/download`,"_blank");}}
+                                  style={{ background:"none", border:"none", color:"#12214B", cursor:"pointer", fontSize:10, opacity:0.8, padding:"2px 5px", borderRadius:4, display:"flex", alignItems:"center", gap:3 }}>
+                                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                                </button>
+                                <button
+                                  onClick={e=>{e.stopPropagation();deleteAttachment(att.id);}}
+                                  style={{ background:"none", border:"none", color:"#F87171", cursor:"pointer", fontSize:10, padding:"2px 5px", borderRadius:4, display:"flex", alignItems:"center" }}>
+                                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
+                                </button>
+                              </div>
+                            ))}
+
+                            {/* Upload button */}
+                            <div onClick={e=>e.stopPropagation()}>
+                              <label style={{ display:"inline-flex", alignItems:"center", gap:6, padding:"5px 12px", borderRadius:7, background:"rgba(18,33,75,0.08)", border:"1px dashed rgba(251,191,36,0.4)", color:"#12214B", cursor:"pointer", fontSize:11, fontWeight:600 }}>
+                                {uploading[q.question_id]
+                                  ? <><span style={{ width:8, height:8, borderRadius:"50%", background:"#12214B", display:"inline-block", animation:"blink 1.4s infinite" }} /> Envoi…</>
+                                  : <><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> Ajouter un document</>}
+                                <input type="file" style={{ display:"none" }} disabled={uploading[q.question_id]}
+                                  onChange={e=>{ if(e.target.files[0]) uploadFile(q.question_id, e.target.files[0]); e.target.value=""; }} />
+                              </label>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
@@ -1459,8 +2100,8 @@ function DetailModal({ ticket: initialTicket, onClose, onDone, dark=true }) {
     const [exp, setExp] = useState(null);
     const risks = result.risks || [];
     const byLevel = ["Critical","High","Medium","Low"];
-    const RC = { Critical:"#F87171", High:"#F97316", Medium:"#FBBF24", Low:"#34D399" };
-    const RBG = { Critical:"rgba(248,113,113,0.1)", High:"rgba(249,115,22,0.1)", Medium:"rgba(251,191,36,0.1)", Low:"rgba(52,211,153,0.1)" };
+    const RC = { Critical:"#F87171", High:"#F97316", Medium:"#12214B", Low:"#34D399" };
+    const RBG = { Critical:"rgba(248,113,113,0.1)", High:"rgba(249,115,22,0.1)", Medium:"rgba(18,33,75,0.07)", Low:"rgba(52,211,153,0.1)" };
     if (!risks.length) return <div style={{ padding:32, textAlign:"center", color:D.faint }}>Aucun risque documenté</div>;
     return (
       <div>
@@ -1521,9 +2162,9 @@ function DetailModal({ ticket: initialTicket, onClose, onDone, dark=true }) {
           return (
             <div key={q.question_id} style={{ border:"1px solid rgba(248,113,113,0.2)", borderRadius:12, marginBottom:12, overflow:"hidden" }}>
               <div style={{ display:"flex", alignItems:"center", gap:10, padding:"11px 14px", background:"rgba(248,113,113,0.06)", borderBottom:"1px solid rgba(248,113,113,0.15)" }}>
-                <span style={{ background:`rgba(${c==="#34D399"?"52,211,153":c==="#FBBF24"?"251,191,36":c==="#F97316"?"249,115,22":"248,113,113"},0.12)`, color:c, fontSize:9, fontWeight:800, padding:"2px 6px", borderRadius:4, fontFamily:"monospace", border:`1px solid ${c}22`, flexShrink:0 }}>{q.question_id}</span>
+                <span style={{ background:`rgba(${c==="#34D399"?"52,211,153":c==="#12214B"?"251,191,36":c==="#F97316"?"249,115,22":"248,113,113"},0.12)`, color:c, fontSize:9, fontWeight:800, padding:"2px 6px", borderRadius:4, fontFamily:"monospace", border:`1px solid ${c}22`, flexShrink:0 }}>{q.question_id}</span>
                 <div style={{ flex:1, fontWeight:600, fontSize:12, color:D.text }}>{q.question}</div>
-                <span style={{ fontSize:10, fontWeight:700, color:c, background:`rgba(${c==="#34D399"?"52,211,153":c==="#FBBF24"?"251,191,36":c==="#F97316"?"249,115,22":"248,113,113"},0.1)`, padding:"2px 7px", borderRadius:6 }}>{q.score}/4</span>
+                <span style={{ fontSize:10, fontWeight:700, color:c, background:`rgba(${c==="#34D399"?"52,211,153":c==="#12214B"?"251,191,36":c==="#F97316"?"249,115,22":"248,113,113"},0.1)`, padding:"2px 7px", borderRadius:6 }}>{q.score}/4</span>
               </div>
               <div style={{ padding:"12px 14px" }}>
                 {q.response && <div style={{ marginBottom:8 }}>
@@ -1546,6 +2187,131 @@ function DetailModal({ ticket: initialTicket, onClose, onDone, dark=true }) {
             </div>
           );
         })}
+      </div>
+    );
+  }
+
+  // ── Attachments Tab ─────────────────────────────────────────────────────────
+  function AttachmentsTab() {
+    const questions = result.question_scores || [];
+    const reqQs     = questions.filter(q => q.piece_jointe);
+    const otherQs   = questions.filter(q => !q.piece_jointe);
+
+    function QSection({ qs, title, required }) {
+      return (
+        <div style={{ marginBottom:24 }}>
+          {title && (
+            <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:12 }}>
+              <div style={{ width:3, height:16, borderRadius:2, background: required?"#12214B":"rgba(255,255,255,0.2)" }} />
+              <span style={{ fontSize:12, fontWeight:700, color: required?"#12214B":D.muted, letterSpacing:"0.05em" }}>{title}</span>
+              {required && <span style={{ padding:"1px 7px", borderRadius:20, background:"rgba(18,33,75,0.08)", color:"#12214B", fontSize:10, fontWeight:700 }}>{reqQs.length} question{reqQs.length>1?"s":""}</span>}
+            </div>
+          )}
+          <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
+            {qs.map(q => {
+              const atts    = attachments[q.question_id] || [];
+              const hasPJ   = !!q.piece_jointe;
+              const isDone  = atts.length > 0;
+              const borderC = hasPJ ? (isDone?"rgba(52,211,153,0.25)":"rgba(18,33,75,0.25)") : D.border;
+              const bgC     = hasPJ ? (isDone?"rgba(52,211,153,0.04)":"rgba(18,33,75,0.04)") : D.surface;
+              return (
+                <div key={q.question_id} style={{ border:`1px solid ${borderC}`, borderRadius:12, overflow:"hidden", background:bgC }}>
+                  {/* Question header */}
+                  <div style={{ display:"flex", alignItems:"flex-start", gap:10, padding:"12px 14px", borderBottom:atts.length>0||true?`1px solid ${D.border}`:"none" }}>
+                    <span style={{ fontFamily:"monospace", fontSize:10, fontWeight:800, padding:"2px 7px", borderRadius:5, flexShrink:0, marginTop:1,
+                      background: hasPJ?(isDone?"rgba(52,211,153,0.1)":"rgba(18,33,75,0.07)"):"rgba(255,255,255,0.06)",
+                      color:      hasPJ?(isDone?"#34D399":"#12214B"):D.faint,
+                      border:     hasPJ?(isDone?"1px solid rgba(52,211,153,0.2)":"1px solid rgba(251,191,36,0.2)"):`1px solid ${D.border}` }}>
+                      {q.question_id}
+                    </span>
+                    <div style={{ flex:1, minWidth:0 }}>
+                      <div style={{ color:D.text, fontSize:12, lineHeight:1.5, fontWeight:500 }}>{q.question}</div>
+                      {q.piece_jointe && (
+                        <div style={{ marginTop:4, display:"flex", alignItems:"center", gap:5 }}>
+                          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#12214B" strokeWidth="2.5" strokeLinecap="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+                          <span style={{ color:"#12214B", fontSize:10, fontStyle:"italic" }}>{q.piece_jointe}</span>
+                        </div>
+                      )}
+                    </div>
+                    {/* Status chip */}
+                    {hasPJ && (
+                      <div style={{ flexShrink:0, display:"flex", alignItems:"center", gap:4,
+                        padding:"3px 8px", borderRadius:20, fontSize:10, fontWeight:700,
+                        background: isDone?"rgba(52,211,153,0.1)":"rgba(18,33,75,0.07)",
+                        color: isDone?"#34D399":"#12214B",
+                        border: isDone?"1px solid rgba(52,211,153,0.2)":"1px solid rgba(251,191,36,0.2)" }}>
+                        {isDone
+                          ? <><svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round"><polyline points="20 6 9 17 4 12"/></svg> {atts.length} fichier{atts.length>1?"s":""}</>
+                          : <><svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><circle cx="12" cy="12" r="9"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg> Requis</>}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Attached files */}
+                  <div style={{ padding:"8px 14px" }}>
+                    {atts.map(att => (
+                      <div key={att.id} style={{ display:"flex", alignItems:"center", gap:8, padding:"6px 10px", borderRadius:8, marginBottom:5,
+                        background: hasPJ?"rgba(52,211,153,0.06)":"rgba(255,255,255,0.04)", border:`1px solid ${hasPJ?"rgba(52,211,153,0.15)":D.border}` }}>
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={hasPJ?"#34D399":D.muted} strokeWidth="2" strokeLinecap="round"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="13 2 13 9 20 9"/></svg>
+                        <span style={{ flex:1, fontSize:11, color:hasPJ?"#34D399":D.muted, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{att.filename}</span>
+                        <span style={{ fontSize:10, color:D.faint }}>
+                          {new Date(att.uploaded_at).toLocaleDateString("fr-FR",{day:"2-digit",month:"short"})}
+                        </span>
+                        <button onClick={()=>window.open(`${API}/tickets/${initialTicket.id}/attachments/${att.id}/download`,"_blank")}
+                          style={{ background:"none", border:"none", color:hasPJ?"#34D399":D.muted, cursor:"pointer", padding:"2px 5px", borderRadius:4, display:"flex", alignItems:"center" }}>
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                        </button>
+                        <button onClick={()=>deleteAttachment(att.id)}
+                          style={{ background:"none", border:"none", color:"#F87171", cursor:"pointer", padding:"2px 5px", borderRadius:4, display:"flex", alignItems:"center" }}>
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
+                        </button>
+                      </div>
+                    ))}
+
+                    {/* Upload zone */}
+                    <label style={{ display:"flex", alignItems:"center", justifyContent:"center", gap:8, padding:"10px", borderRadius:8, marginTop: atts.length>0?6:0, cursor:"pointer",
+                      border: `1.5px dashed ${hasPJ?"rgba(18,33,75,0.28)":D.border}`,
+                      background: uploading[q.question_id]?"rgba(18,33,75,0.04)":"transparent",
+                      transition:"all 0.15s" }}>
+                      {uploading[q.question_id] ? (
+                        <><span style={{ width:8, height:8, borderRadius:"50%", background:"#12214B", display:"inline-block", animation:"blink 1.4s infinite" }} />
+                        <span style={{ color:"#12214B", fontSize:11, fontWeight:500 }}>Envoi en cours…</span></>
+                      ) : (
+                        <><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={hasPJ?"#12214B":D.muted} strokeWidth="2.5" strokeLinecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                        <span style={{ color:hasPJ?"#12214B":D.muted, fontSize:11, fontWeight:500 }}>
+                          {atts.length > 0 ? "Ajouter un autre document" : hasPJ ? "Déposer la pièce jointe" : "Ajouter un document"}
+                        </span></>
+                      )}
+                      <input type="file" style={{ display:"none" }} disabled={uploading[q.question_id]}
+                        onChange={e=>{ if(e.target.files[0]) uploadFile(q.question_id, e.target.files[0]); e.target.value=""; }} />
+                    </label>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div>
+        {reqQs.length > 0 && (
+          <div style={{ display:"flex", alignItems:"center", gap:10, padding:"10px 14px", borderRadius:10, marginBottom:20,
+            background:"rgba(18,33,75,0.06)", border:"1px solid rgba(251,191,36,0.2)" }}>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#12214B" strokeWidth="2" strokeLinecap="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+            <div>
+              <span style={{ color:"#12214B", fontSize:12, fontWeight:600 }}>
+                {pjDone}/{pjTotal} pièce{pjTotal>1?"s":""} jointe{pjTotal>1?"s":""} fournie{pjTotal>1?"s":""}
+              </span>
+              <span style={{ color:D.faint, fontSize:11, marginLeft:8 }}>
+                {pjDone < pjTotal ? `— ${pjTotal-pjDone} document${pjTotal-pjDone>1?"s":""} manquant${pjTotal-pjDone>1?"s":""}` : "— Toutes les pièces sont fournies ✓"}
+              </span>
+            </div>
+          </div>
+        )}
+        {reqQs.length > 0 && <QSection qs={reqQs} title="Documents requis par l'analyse" required={true} />}
+        {otherQs.length > 0 && <QSection qs={otherQs} title="Autres questions (optionnel)" required={false} />}
       </div>
     );
   }
@@ -1634,8 +2400,8 @@ function DetailModal({ ticket: initialTicket, onClose, onDone, dark=true }) {
               {tabs.map(t => (
                 <button key={t.key} onClick={()=>setTab(t.key)}
                   style={{ padding:"10px 16px", background:"none", border:"none", cursor:"pointer", fontSize:12, fontWeight:tab===t.key?700:400,
-                    color: tab===t.key ? (t.red?"#F87171":"#fff") : D.muted,
-                    borderBottom: tab===t.key ? `2px solid ${t.red?"#F87171":"#E30613"}` : "2px solid transparent",
+                    color: tab===t.key ? (t.red?"#F87171":t.yellow?"#12214B":"#fff") : D.muted,
+                    borderBottom: tab===t.key ? `2px solid ${t.red?"#F87171":t.yellow?"#12214B":"#E30613"}` : "2px solid transparent",
                     whiteSpace:"nowrap", transition:"all 0.12s" }}>
                   {t.label}
                 </button>
@@ -1663,6 +2429,7 @@ function DetailModal({ ticket: initialTicket, onClose, onDone, dark=true }) {
               {tab==="questions"    && <QuestionsTab />}
               {tab==="risks"        && <RisksTab />}
               {tab==="showstoppers" && <ShowstoppersTab />}
+              {tab==="attachments"  && <AttachmentsTab />}
             </>
           )}
         </div>
@@ -1798,8 +2565,8 @@ function TicketRow({ ticket, onSelect, adminMode: isAdmin, checked, onCheck, dar
           {ticket.status === "waiting_validation" && (
             <button onClick={e => { e.stopPropagation(); onSelect(ticket); }}
               style={{ display:"inline-flex", alignItems:"center", gap:5, padding:"5px 11px", borderRadius:7,
-                background:"rgba(251,191,36,0.12)", border:"1px solid rgba(251,191,36,0.25)",
-                color:"#FBBF24", cursor:"pointer", fontSize:11, fontWeight:600 }}>
+                background:"rgba(18,33,75,0.08)", border:"1px solid rgba(251,191,36,0.25)",
+                color:"#12214B", cursor:"pointer", fontSize:11, fontWeight:600 }}>
               <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
               Valider
             </button>
@@ -1852,6 +2619,7 @@ export default function App() {
     try { return JSON.parse(sessionStorage.getItem("tpra_user") || "null"); }
     catch { return null; }
   });
+  const [T, lang, changeLang, isRtl] = useLang();
 
   function handleLogin(user) {
     sessionStorage.setItem("tpra_user", JSON.stringify(user));
@@ -1863,11 +2631,11 @@ export default function App() {
     setCurrentUser(null);
   }
 
-  if (!currentUser) return <LoginScreen onLogin={handleLogin} />;
-  return <DashboardApp currentUser={currentUser} onLogout={handleLogout} />;
+  if (!currentUser) return <LoginScreen onLogin={handleLogin} tr={T} lang={lang} changeLang={changeLang} isRtl={isRtl} />;
+  return <DashboardApp currentUser={currentUser} onLogout={handleLogout} tr={T} lang={lang} changeLang={changeLang} isRtl={isRtl} />;
 }
 
-function DashboardApp({ currentUser, onLogout }) {
+function DashboardApp({ currentUser, onLogout, tr, lang, changeLang, isRtl }) {
   const isAdmin = currentUser.role === "admin";
 
   const [tickets, setTickets]             = useState([]);
@@ -1965,9 +2733,9 @@ function DashboardApp({ currentUser, onLogout }) {
   const FILTERS = [
     { key:"all",                label:"Tous",       count:tickets.length },
     { key:"pending",            label:"En attente", count:counts.pending||0 },
-    { key:"running",            label:"En cours",   count:counts.running||0 },
-    { key:"waiting_validation", label:"À valider",  count:counts.waiting_validation||0 },
-    { key:"completed",          label:"Terminés",   count:counts.completed||0 },
+    { key:"running",            label:tr.kpi_running,   count:counts.running||0 },
+    { key:"waiting_validation", label:tr.kpi_validate,  count:counts.waiting_validation||0 },
+    { key:"completed",          label:tr.kpi_done,   count:counts.completed||0 },
     { key:"rejected",           label:"Rejetés",    count:counts.rejected||0 },
     { key:"error",              label:"Erreurs",    count:counts.error||0 },
   ];
@@ -1992,7 +2760,7 @@ function DashboardApp({ currentUser, onLogout }) {
   const someChecked = checkedIds.size > 0;
 
   return (
-    <div style={{ minHeight:"100vh", background:T.bg, color:T.text, fontFamily:"'DM Sans','Segoe UI',sans-serif", transition:"background 0.3s, color 0.3s" }}>
+    <div dir={isRtl?"rtl":"ltr"} style={{ minHeight:"100vh", background:T.bg, color:T.text, fontFamily:"'DM Sans','Segoe UI',sans-serif", transition:"background 0.3s, color 0.3s" }}>
       <style>{[
         `@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=DM+Mono:wght@400;500&display=swap');`,
         `* { box-sizing:border-box; margin:0; padding:0; }`,
@@ -2031,9 +2799,11 @@ function DashboardApp({ currentUser, onLogout }) {
             </div>
             <div>
               <div style={{ fontSize:12, fontWeight:600, color:T.text }}>{currentUser.name}</div>
-              <div style={{ fontSize:9, color:T.textFaint, letterSpacing:"0.08em" }}>{isAdmin?"ADMIN":"ANALYSTE CYBER"}</div>
+              <div style={{ fontSize:9, color:T.textFaint, letterSpacing:"0.08em" }}>{isAdmin?tr.role_admin:tr.role_cyber}</div>
             </div>
           </div>
+          {/* Lang selector */}
+          <LangSelector lang={lang} changeLang={changeLang} dark={dark} />
           {/* Theme toggle */}
           <button onClick={() => setDark(d=>!d)} className="action-btn"
             style={{ width:36, height:36, borderRadius:10, display:"flex", alignItems:"center", justifyContent:"center", background:T.surface, border:`1px solid ${T.border}`, color:T.textMuted, cursor:"pointer" }}>
@@ -2080,11 +2850,11 @@ function DashboardApp({ currentUser, onLogout }) {
         {/* ── KPI CARDS ── Inspired by Gaia: large numbers, horizontal scroll if needed */}
         <div style={{ display:"grid", gridTemplateColumns:"repeat(5,1fr)", gap:14, marginBottom:32 }}>
           {[
-            { label:"Tickets total",  value:tickets.length,               color:"#7A96D4", rgb:"58,95,191",   icon:<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></svg> },
-            { label:"En cours",       value:counts.running||0,            color:"#FBBF24", rgb:"251,191,36",  icon:<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 15"/></svg> },
-            { label:"À valider",      value:counts.waiting_validation||0, color:"#F97316", rgb:"249,115,22",  icon:<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg> },
-            { label:"Terminés",       value:counts.completed||0,          color:"#34D399", rgb:"52,211,153",  icon:<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"><polyline points="20 6 9 17 4 12"/></svg> },
-            { label:"Rejetés / Err.", value:(counts.rejected||0)+(counts.error||0), color:"#F87171", rgb:"248,113,113", icon:<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg> },
+            { label:tr.kpi_total,  value:tickets.length,               color:"#7A96D4", rgb:"58,95,191",   icon:<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></svg> },
+            { label:tr.kpi_running,       value:counts.running||0,            color:"#12214B", rgb:"251,191,36",  icon:<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 15"/></svg> },
+            { label:tr.kpi_validate,      value:counts.waiting_validation||0, color:"#F97316", rgb:"249,115,22",  icon:<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg> },
+            { label:tr.kpi_done,       value:counts.completed||0,          color:"#34D399", rgb:"52,211,153",  icon:<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"><polyline points="20 6 9 17 4 12"/></svg> },
+            { label:tr.kpi_rejected, value:(counts.rejected||0)+(counts.error||0), color:"#F87171", rgb:"248,113,113", icon:<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg> },
           ].map(({ label, value, icon, color, rgb },i) => (
             <div key={label} className="kpi-card" style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:16, padding:"20px 22px 18px", position:"relative", overflow:"hidden", cursor:"default",
               boxShadow: dark ? `0 0 0 1px rgba(${rgb},0.08)` : "0 2px 16px rgba(18,33,75,0.07)" }}>
@@ -2098,7 +2868,7 @@ function DashboardApp({ currentUser, onLogout }) {
               <div style={{ fontSize:42, fontWeight:800, lineHeight:1, color: dark ? "#fff" : "#0f172a", letterSpacing:"-0.03em" }}>{value}</div>
               {/* subtle bottom label */}
               <div style={{ marginTop:10, fontSize:10, color:`rgba(${rgb},0.7)`, fontWeight:600 }}>
-                {value === 0 ? "Aucun" : value === 1 ? "1 ticket" : `${value} tickets`}
+                {value === 0 ? tr.kpi_none : value === 1 ? `1 ${tr.kpi_one}` : `${value} ${tr.kpi_many}`}
               </div>
             </div>
           ))}
@@ -2163,7 +2933,7 @@ function DashboardApp({ currentUser, onLogout }) {
               <span style={{ position:"absolute", left:10, top:"50%", transform:"translateY(-50%)", color:T.textFaint, display:"flex", pointerEvents:"none" }}>
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
               </span>
-              <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Rechercher…"
+              <input value={search} onChange={e=>setSearch(e.target.value)} placeholder={tr.search_ph}
                 style={{ padding:"6px 10px 6px 28px", borderRadius:8, background:T.inputBg, border:`1px solid ${T.inputBorder}`, color:T.inputText, fontSize:11, outline:"none", width:180 }} />
             </div>
           </div>
@@ -2187,7 +2957,7 @@ function DashboardApp({ currentUser, onLogout }) {
           {loading ? (
             <div style={{ padding:64, textAlign:"center", color:T.textFaint, fontSize:13 }}>
               <div style={{ width:8, height:8, borderRadius:"50%", background:"#E30613", display:"inline-block", animation:"blink 1.4s infinite", marginRight:10 }} />
-              Chargement…
+              {tr.loading}
             </div>
           ) : filteredTickets.length === 0 ? (
             <div style={{ padding:80, textAlign:"center" }}>
@@ -2195,7 +2965,7 @@ function DashboardApp({ currentUser, onLogout }) {
                 <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke={T.textFaint} strokeWidth="1.5" strokeLinecap="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></svg>
               </div>
               <div style={{ color:T.textMuted, fontSize:14, fontWeight:500, marginBottom:6 }}>
-                {search ? `Aucun résultat pour "${search}"` : "Aucun ticket pour l'instant"}
+                {search ? `${tr.no_results} "${search}"` : tr.no_tickets}
               </div>
               <div style={{ color:T.textFaint, fontSize:12, marginBottom:20 }}>Créez votre premier ticket d'analyse</div>
               {!search && <button onClick={()=>setShowUpload(true)}
@@ -2208,7 +2978,7 @@ function DashboardApp({ currentUser, onLogout }) {
               <thead>
                 <tr style={{ background: dark?"rgba(0,0,0,0.3)":"#f8fafc", borderBottom:`1px solid ${T.border}` }}>
                   {isAdmin && <th style={{ padding:"13px 16px", width:40 }}><input type="checkbox" checked={allChecked} onChange={toggleAll} /></th>}
-                  {["Fournisseur","Analyste / Validation","Décision","Statut","Date","Actions"].map(h => (
+                  {[tr.col_vendor,tr.col_analyst,tr.col_decision,tr.col_status,tr.col_date,tr.col_actions].map(h => (
                     <th key={h} style={{ padding:"13px 18px", textAlign:"left", color:T.thText, fontSize:10, fontWeight:700, letterSpacing:"0.12em" }}>{h.toUpperCase()}</th>
                   ))}
                 </tr>
@@ -2236,7 +3006,7 @@ function DashboardApp({ currentUser, onLogout }) {
       </div>
 
       {showUpload   && <UploadModal onClose={()=>setShowUpload(false)} onLaunched={id=>{ setShowUpload(false); setTrackingId(id); setLastRefresh(Date.now()); }} />}
-      {trackingId   && <LiveTrackingModal ticketId={trackingId} onClose={()=>{ setTrackingId(null); setLastRefresh(Date.now()); }} onRefreshList={()=>setLastRefresh(Date.now())} />}
+      {trackingId   && <LiveTrackingModal ticketId={trackingId} dark={dark} onClose={()=>{ setTrackingId(null); setLastRefresh(Date.now()); }} onRefreshList={()=>setLastRefresh(Date.now())} />}
       {selected     && <DetailModal ticket={selected} onClose={()=>setSelected(null)} onDone={()=>{ setSelected(null); setLastRefresh(Date.now()); }} dark={dark} />}
       {confirmDelete && <ConfirmDeleteModal count={checkedIds.size} onConfirm={deleteSelected} onCancel={()=>setConfirmDelete(false)} />}
     </div>
